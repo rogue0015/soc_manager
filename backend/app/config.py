@@ -28,6 +28,11 @@ def load_env_file(path: Path) -> dict[str, str]:
     return values
 
 
+def env_flag(name: str, default: str = "on") -> bool:
+    """True unless the variable is set to 0 / off / false."""
+    return os.environ.get(name, default).strip().lower() not in ("0", "off", "false")
+
+
 @dataclass(frozen=True)
 class Settings:
     db_path: Path
@@ -36,6 +41,9 @@ class Settings:
     blog_base_url: str
     scheduler_enabled: bool
     scheduler_interval_seconds: int
+    # Local dev serves the UI from this process. In Docker the frontend has its
+    # own container and the backend is API-only (docs/decisions/0002-docker.md).
+    serve_frontend: bool = True
     # Secrets from the env file, with real environment variables taking priority.
     secrets: dict[str, str] = field(default_factory=dict, repr=False)
 
@@ -49,7 +57,8 @@ class Settings:
             env_file=env_file,
             frontend_dir=PROJECT_ROOT / "frontend",
             blog_base_url=os.environ.get("SM_BLOG_BASE_URL", "https://rogue0015.github.io").rstrip("/"),
-            scheduler_enabled=os.environ.get("SM_SCHEDULER", "on").lower() not in ("0", "off", "false"),
+            scheduler_enabled=env_flag("SM_SCHEDULER"),
             scheduler_interval_seconds=int(os.environ.get("SM_SCHEDULER_INTERVAL", "30")),
+            serve_frontend=env_flag("SM_SERVE_FRONTEND"),
             secrets=secrets,
         )

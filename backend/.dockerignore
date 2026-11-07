@@ -1,0 +1,10 @@
+# Keep the image small and free of anything local.
+tests/
+**/__pycache__/
+**/*.py[cod]
+Dockerfile
+.dockerignore
+env
+.env
+.env.*
+*.db

@@ -1,8 +1,11 @@
 """App entry point.
 
-Run:  ./scripts/dev.sh
- (=   .venv/bin/uvicorn --factory backend.app.main:create_app --reload)
-Then open http://127.0.0.1:8000
+Local dev (API + UI in one process):
+    ./scripts/dev.sh   (= .venv/bin/uvicorn --factory backend.app.main:create_app --reload)
+    then open http://127.0.0.1:8000
+
+Docker (API only, the frontend container proxies /api here):
+    docker compose up --build   then open http://127.0.0.1:8080
 """
 
 from __future__ import annotations
@@ -63,8 +66,9 @@ def create_app(settings: Settings | None = None, publishers: dict[str, Publisher
         app.add_exception_handler(exc_type, handler)
 
     app.include_router(router)
-    # Mounted last so /api routes win. html=True serves index.html at "/".
-    app.mount("/", StaticFiles(directory=settings.frontend_dir, html=True), name="frontend")
+    if settings.serve_frontend:
+        # Mounted last so /api routes win. html=True serves index.html at "/".
+        app.mount("/", StaticFiles(directory=settings.frontend_dir, html=True), name="frontend")
     return app
 
 

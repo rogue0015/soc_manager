@@ -1,6 +1,6 @@
 # 0001: Overall architecture
 
-- **Status:** Accepted
+- **Status:** Accepted (frontend hosting amended by [0002](0002-docker.md))
 - **Date:** 2026-11-07
 
 ## Context

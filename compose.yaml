@@ -1,0 +1,37 @@
+# Social Manager in Docker: two containers.
+#
+#   browser ──▶ frontend (nginx, UI + /api proxy) ──▶ backend (FastAPI + scheduler + SQLite)
+#
+#   cp .env.example env      # then fill in your keys
+#   docker compose up --build -d
+#   open http://127.0.0.1:8080
+#
+# See README "Run with Docker" and docs/decisions/0002-docker.md.
+name: social-manager
+
+services:
+  backend:
+    build: ./backend
+    image: social-manager-backend
+    # Platform keys (X_API_KEY, ...) are read at runtime, never baked into the image.
+    env_file:
+      - path: ./env
+        required: false
+    volumes:
+      - sm-data:/data
+    restart: unless-stopped
+    # No `ports:` on purpose: the API is reachable only through the frontend.
+
+  frontend:
+    build: ./frontend
+    image: social-manager-frontend
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      # 127.0.0.1 only: there is no login yet, so keep it off the network.
+      - "127.0.0.1:${SM_PORT:-8080}:80"
+    restart: unless-stopped
+
+volumes:
+  sm-data:

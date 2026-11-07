@@ -1,0 +1,6 @@
+# Backend runtime dependencies (installed in the Docker image).
+# Dev/test tools live in the root requirements.txt.
+fastapi==0.162.0
+uvicorn[standard]==0.54.0
+requests==2.34.2
+requests-oauthlib==2.0.0
