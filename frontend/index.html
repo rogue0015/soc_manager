@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Social Manager</title>
+  <meta name="description" content="Plan and schedule posts across social platforms from one calendar.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='4' fill='%233451d1'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/app.css">
+  <script type="module" src="js/main.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span>Social Manager</span>
+    </div>
+    <nav class="month-nav" aria-label="Month">
+      <button class="icon-btn" id="prev-month" aria-label="Previous month">‹</button>
+      <h1 id="month-label" aria-live="polite">Month</h1>
+      <button class="icon-btn" id="next-month" aria-label="Next month">›</button>
+      <button class="btn btn-ghost" id="today-btn">Today</button>
+    </nav>
+    <button class="btn btn-primary" id="new-post-btn">+ New post</button>
+  </header>
+
+  <main class="layout">
+    <section class="calendar-panel" aria-label="Content calendar">
+      <ul class="legend" id="legend" aria-label="Platform colours"></ul>
+      <div class="weekdays" aria-hidden="true">
+        <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+      </div>
+      <div class="grid" id="calendar-grid"></div>
+      <p class="hint">Click a day to schedule a post. Click a coloured entry to edit it.</p>
+    </section>
+
+    <aside class="sidebar">
+      <section class="card" id="connections" aria-labelledby="connections-title">
+        <h2 id="connections-title">Connections</h2>
+        <div id="connection-list"></div>
+
+        <details class="test-post" id="test-post">
+          <summary>Send a test post to X</summary>
+          <form id="test-post-form">
+            <label for="test-post-text" class="sr-only">Test message</label>
+            <textarea id="test-post-text" rows="5"></textarea>
+            <div class="row between">
+              <span class="counter" id="test-post-counter"></span>
+              <button class="btn btn-primary" type="submit" id="test-post-send">Post to X now</button>
+            </div>
+            <p class="result" id="test-post-result" role="status"></p>
+          </form>
+        </details>
+      </section>
+
+      <section class="card" id="blog" aria-labelledby="blog-title">
+        <div class="row between">
+          <h2 id="blog-title">From my blog</h2>
+          <button class="btn btn-ghost btn-sm" id="blog-sync">Sync</button>
+        </div>
+        <p class="muted small" id="blog-meta">Loading…</p>
+        <label class="check small"><input type="checkbox" id="blog-unscheduled-only" checked> Only show posts not yet scheduled</label>
+        <ul class="blog-list" id="blog-list"></ul>
+        <div class="row between sticky-actions">
+          <button class="btn btn-ghost btn-sm" id="blog-select-all">Select all</button>
+          <button class="btn btn-primary btn-sm" id="blog-plan-btn" disabled>Plan selected</button>
+        </div>
+      </section>
+    </aside>
+  </main>
+
+  <!-- Compose / edit a post -->
+  <dialog id="composer" aria-labelledby="composer-title">
+    <form method="dialog" id="composer-form" novalidate>
+      <header class="dialog-head">
+        <h2 id="composer-title">New post</h2>
+        <button class="icon-btn" type="button" data-close aria-label="Close">×</button>
+      </header>
+
+      <div id="day-posts" class="day-posts"></div>
+
+      <div class="dialog-body" id="composer-fields">
+        <div class="segmented" role="radiogroup" aria-label="Content source">
+          <label><input type="radio" name="source" value="custom" checked> Write my own</label>
+          <label><input type="radio" name="source" value="blog"> From my blog</label>
+        </div>
+
+        <label class="field" id="blog-pick-field" hidden>
+          <span>Blog post</span>
+          <select id="blog-pick"></select>
+        </label>
+
+        <label class="field">
+          <span>Post text</span>
+          <textarea id="post-body" rows="6" required></textarea>
+        </label>
+        <div class="counters" id="post-counters" aria-live="polite"></div>
+
+        <fieldset class="field">
+          <legend>Platforms</legend>
+          <div class="platform-picks" id="platform-picks"></div>
+        </fieldset>
+
+        <div class="row two">
+          <label class="field"><span>Date</span><input type="date" id="post-date" required></label>
+          <label class="field"><span>Time</span><input type="time" id="post-time" required></label>
+        </div>
+
+        <div id="target-status" class="target-status"></div>
+        <p class="form-error" id="composer-error" role="alert"></p>
+      </div>
+
+      <footer class="dialog-foot">
+        <button class="btn btn-danger" type="button" id="post-delete" hidden>Delete</button>
+        <button class="btn btn-ghost" type="button" id="post-retry" hidden>Retry failed</button>
+        <span class="spacer"></span>
+        <button class="btn btn-ghost" type="button" data-close>Cancel</button>
+        <button class="btn btn-primary" type="submit" id="post-save">Schedule</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <!-- Auto-plan selected blog posts -->
+  <dialog id="plan-dialog" aria-labelledby="plan-title">
+    <form method="dialog" id="plan-form" novalidate>
+      <header class="dialog-head">
+        <h2 id="plan-title">Plan blog posts</h2>
+        <button class="icon-btn" type="button" data-close aria-label="Close">×</button>
+      </header>
+      <div class="dialog-body">
+        <p class="muted" id="plan-summary"></p>
+        <div class="row two">
+          <label class="field"><span>First post on</span><input type="date" id="plan-date" required></label>
+          <label class="field"><span>At</span><input type="time" id="plan-time" value="09:00" required></label>
+        </div>
+        <label class="field"><span>Then one every</span>
+          <select id="plan-every">
+            <option value="1">day</option><option value="2" selected>2 days</option>
+            <option value="3">3 days</option><option value="7">week</option><option value="14">2 weeks</option>
+          </select>
+        </label>
+        <fieldset class="field">
+          <legend>Platforms</legend>
+          <div class="platform-picks" id="plan-platforms"></div>
+        </fieldset>
+        <ol class="plan-preview" id="plan-preview"></ol>
+        <p class="form-error" id="plan-error" role="alert"></p>
+      </div>
+      <footer class="dialog-foot">
+        <span class="spacer"></span>
+        <button class="btn btn-ghost" type="button" data-close>Cancel</button>
+        <button class="btn btn-primary" type="submit">Create schedule</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

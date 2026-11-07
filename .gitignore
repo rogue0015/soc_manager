@@ -1,0 +1,28 @@
+# --- Secrets: never commit ------------------------------------------------
+env
+.env
+.env.*
+*.pem
+*.key
+
+# --- Private planning docs and AI assistant instructions (kept local) -----
+CLAUDE.md
+.claude/
+docs/planning/
+test_credentials/README.md
+
+# --- Local data -----------------------------------------------------------
+data/
+*.db
+*.db-journal
+
+# --- Python ---------------------------------------------------------------
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# --- Editors / OS ---------------------------------------------------------
+.vscode/
+.idea/
+.DS_Store
