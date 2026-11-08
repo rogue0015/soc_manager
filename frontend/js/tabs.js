@@ -1,10 +1,10 @@
-// Top-level tabs: Status, Social, Analytics, Scheduler.
+// Top-level tabs: Status, Social, Media, AI generation, Analytics, Scheduler.
 // The open tab is kept in the URL hash (#analytics) so reload and links work,
 // and remembered for the next visit. Views register onShow() to load lazily.
 
 import { prefs } from './util.js';
 
-const TABS = ['status', 'social', 'analytics', 'scheduler'];
+const TABS = ['status', 'social', 'media', 'ai', 'analytics', 'scheduler'];
 const DEFAULT_TAB = 'status';
 const handlers = new Map(TABS.map((t) => [t, []]));
 let current = null;

@@ -18,9 +18,11 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from .config import Settings
+from .config import Settings, set_env_values
 from .db import Database
 from .platforms import Publisher, build_publishers
+from .platforms.base import set_token_saver
+from .routes.ai import router as ai_router
 from .routes.api import router
 from .services.activity import ActivityLog
 from .services.analytics import AnalyticsService
@@ -28,7 +30,10 @@ from .services.article import ArticleReader
 from .services.attachments import Attachments
 from .services.blog import BlogService
 from .services.errors import Conflict, InvalidInput, NotFound
+from .services.ai_writer import AIWriter
+from .services.gemini import Gemini
 from .services.live import LiveService
+from .services.personas import PersonaService
 from .services.media import MediaService
 from .services.monitor import MonitorService
 from .services.posts import PostService
@@ -54,6 +59,15 @@ def create_app(settings: Settings | None = None, publishers: dict[str, Publisher
     articles = ArticleReader(db)
     attachments = Attachments(db, media, articles=articles)
     publishers = build_publishers(settings.secrets) if publishers is None else publishers
+
+    def save_tokens(values: dict[str, str]) -> None:
+        # Refreshed sign-in tokens (TikTok replaces its refresh token on every use) must survive a restart.
+        settings.secrets.update(values)
+        try:
+            set_env_values(settings.env_file, values)
+        except OSError as exc:
+            log.error("Could not save refreshed tokens to %s: %s", settings.env_file, exc)
+    set_token_saver(save_tokens)
     scheduler = SchedulerState(settings.scheduler_enabled, settings.scheduler_interval_seconds)
 
     @asynccontextmanager
@@ -90,6 +104,9 @@ def create_app(settings: Settings | None = None, publishers: dict[str, Publisher
     app.state.articles = articles
     app.state.live = LiveService(posts, publishers, activity, attachments)
     app.state.stats_import = StatsImport(posts)
+    app.state.personas = PersonaService(db)
+    # Gemini is built per use from the shared secrets, so a new key needs no rebuild here.
+    app.state.ai = AIWriter(db, app.state.personas, articles, activity, lambda: Gemini(settings.secrets))
 
     # Map domain errors to HTTP in one place. The UI shows `detail` to the user.
     for exc_type, status in ((NotFound, 404), (Conflict, 409), (InvalidInput, 422)):
@@ -98,6 +115,7 @@ def create_app(settings: Settings | None = None, publishers: dict[str, Publisher
         app.add_exception_handler(exc_type, handler)
 
     app.include_router(router)
+    app.include_router(ai_router)
     if settings.serve_frontend:
         # Mounted last so /api routes win. html=True serves index.html at "/".
         app.mount("/", StaticFiles(directory=settings.frontend_dir, html=True), name="frontend")

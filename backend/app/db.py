@@ -50,7 +50,8 @@ CREATE TABLE IF NOT EXISTS blog_posts (
     fetched_at    TEXT NOT NULL
 );
 
--- Images uploaded in the composer. The file itself is <media dir>/<id> (services/media.py).
+-- The media library: pictures and videos. The file itself is <media dir>/<id> (services/media.py).
+-- kind, name, width, height and duration_ms are added by MIGRATIONS below (ADR 0011).
 CREATE TABLE IF NOT EXISTS media (
     id            TEXT PRIMARY KEY,
     mime          TEXT    NOT NULL,   -- image/jpeg | image/png | image/gif
@@ -82,11 +83,52 @@ CREATE TABLE IF NOT EXISTS activity (
     at            TEXT    NOT NULL,   -- UTC ISO-8601
     kind          TEXT    NOT NULL,   -- started | scheduled | edited | deleted | retried | published
                                       -- | failed | interrupted | test_post | signed_in | blog_synced
-                                      -- | blog_planned | removed | stats_imported
+                                      -- | blog_planned | removed | stats_imported | ai_generated
     platform      TEXT,               -- platform id, when the event is about one platform
     post_id       INTEGER,
     message       TEXT    NOT NULL,   -- one sentence, shown to the user as is
     url           TEXT                -- link to the live post, if any
+);
+
+-- How AI-written posts should sound (services/personas.py). Style only: no lengths or
+-- platforms, so any persona works with any platform. See ADR 0012.
+CREATE TABLE IF NOT EXISTS personas (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    name          TEXT    NOT NULL UNIQUE COLLATE NOCASE,
+    tone          TEXT    NOT NULL DEFAULT '',
+    voice         TEXT    NOT NULL DEFAULT '',
+    language      TEXT    NOT NULL DEFAULT '',
+    format        TEXT    NOT NULL DEFAULT '',
+    hashtags      TEXT    NOT NULL DEFAULT '',
+    emoji         TEXT    NOT NULL DEFAULT '',
+    always        TEXT    NOT NULL DEFAULT '',
+    never         TEXT    NOT NULL DEFAULT '',
+    example       TEXT    NOT NULL DEFAULT '',
+    created_at    TEXT    NOT NULL,
+    updated_at    TEXT    NOT NULL
+);
+
+-- Every AI generation, remembered (services/ai_writer.py). No foreign key on persona_id:
+-- the history outlives a deleted persona and keeps its own copy. Newest 200 are kept.
+CREATE TABLE IF NOT EXISTS generations (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at    TEXT    NOT NULL,
+    source        TEXT    NOT NULL CHECK (source IN ('idea', 'blog')),
+    idea          TEXT    NOT NULL DEFAULT '',
+    blog_url      TEXT,
+    event         TEXT    NOT NULL DEFAULT '{}',   -- JSON: name, day, venue, takeaways
+    platforms     TEXT    NOT NULL,                -- JSON list of platform ids
+    persona_id    INTEGER,
+    persona       TEXT    NOT NULL,                -- JSON copy of the persona as used
+    model         TEXT    NOT NULL,
+    drafts        TEXT    NOT NULL                 -- JSON: platform -> {text, title?, length, limit, over, post_id, error}
+);
+
+-- Requests sent to Gemini per day (Pacific time, when Google's daily quota resets), so the
+-- daily budget survives a restart (services/ai_writer.py Usage). Old days can be dropped.
+CREATE TABLE IF NOT EXISTS ai_usage (
+    day           TEXT    PRIMARY KEY,             -- YYYY-MM-DD in Pacific time
+    requests      INTEGER NOT NULL DEFAULT 0
 );
 """
 
@@ -105,6 +147,13 @@ MIGRATIONS: tuple[tuple[str, str, str], ...] = (
     ("post_targets", "removed_at", "TEXT"),
     # Text changed on the platform through the app.
     ("post_targets", "edited_at", "TEXT"),
+    # The media library holds videos as well as pictures (services/media.py, ADR 0011).
+    ("media", "kind", "TEXT NOT NULL DEFAULT 'image'"),   # image | video
+    ("media", "name", "TEXT"),                            # the file name it was uploaded with
+    ("media", "width", "INTEGER"),                        # as displayed (video rotation applied)
+    ("media", "height", "INTEGER"),
+    ("media", "duration_ms", "INTEGER"),                  # videos only
+    ("post_metrics", "views", "INTEGER"),                 # video views (YouTube)
     # A past post read from the platform's own export (not sent by this app). See ADR 0008.
     ("post_targets", "imported_at", "TEXT"),
 )

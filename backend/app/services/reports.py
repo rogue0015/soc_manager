@@ -23,7 +23,7 @@ from .xlsx import Sheet, write_xlsx
 METRIC_LABELS = {
     "impressions": "Impressions", "members_reached": "Members reached", "reactions": "Reactions",
     "comments": "Comments", "reshares": "Reposts", "saves": "Saves", "link_clicks": "Link clicks",
-    "clicks": "Clicks", "engagements": "Engagements",
+    "clicks": "Clicks", "engagements": "Engagements", "views": "Views",
 }
 COLUMNS = ["Date", "Platform", "Status", "Sent by", "Text", "Link", "Content", "Blog post",
            *(METRIC_LABELS[k] for k in METRICS), "Stats from", "Problem"]

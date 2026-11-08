@@ -562,6 +562,79 @@ a.target-badge:hover { background: var(--surface-2); }
 .steps { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 6px; }
 .analytics-note { align-items: center; gap: 8px 16px; }
 
+/* ---- media library and attachments (js/media.js, js/post-media.js) ---- */
+.media-grid { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); }
+.media-grid.compact { grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr)); }
+.media-card { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 10px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+.media-thumb { aspect-ratio: 16 / 10; background: var(--surface-2); border-radius: var(--radius-sm);
+  overflow: hidden; display: grid; place-items: center; }
+.media-thumb img, .media-thumb video { width: 100%; height: 100%; object-fit: contain; }
+.media-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.media-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.media-actions a.btn { text-decoration: none; }
+.media-attached { display: flex; flex-wrap: wrap; gap: 10px; }
+.media-attached video { max-width: 100%; max-height: 240px; border-radius: var(--radius-sm); background: var(--surface-2); }
+.crop-thumb { margin: 0; display: flex; flex-direction: column; gap: 4px; }
+.crop-thumb img { max-height: 120px; max-width: 200px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.media-fit { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; font-size: .85rem; }
+.media-fit .ok > span { color: var(--ok); font-weight: 700; }
+.media-fit .bad { color: var(--danger); }
+.busy-area { opacity: .6; pointer-events: none; }
+
+/* Cropper (js/cropper.js) */
+dialog.wide { width: min(760px, calc(100vw - 32px)); }
+.crop-tabs { flex-wrap: wrap; }
+.crop-tabs label { display: inline-flex; align-items: center; gap: 4px; }
+.crop-stage { width: 100%; display: grid; place-items: center; background: var(--surface-2); border-radius: var(--radius-sm); }
+#crop-canvas { max-width: 100%; height: auto; cursor: grab; touch-action: none; border-radius: 2px; }
+#crop-canvas:active { cursor: grabbing; }
+
+/* ---- AI generation tab (js/ai.js, js/personas.js) ----------------------- */
+.tab-short { display: none; }
+.ai-layout { display: grid; grid-template-columns: minmax(320px, 440px) minmax(0, 1fr); gap: var(--gap); align-items: start; }
+.ai-form { display: flex; flex-direction: column; gap: 14px; }
+.ai-form h2, .ai-results h2 { font-size: 1.05rem; }
+.ai-form .note { margin: 0; }
+.ai-event summary { cursor: pointer; font-weight: 600; font-size: .9rem; }
+.ai-event[open] > summary { margin-bottom: 10px; }
+.ai-event > .field, .ai-event > .row { margin-top: 10px; }
+.ai-persona-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
+.ai-persona-row .field { flex: 1 1 200px; }
+.ai-results { display: flex; flex-direction: column; gap: var(--gap); min-width: 0; }
+.ai-results h2 { margin-bottom: 8px; }
+.ai-drafts { display: flex; flex-direction: column; gap: 12px; }
+.ai-drafts[aria-busy="true"] { opacity: .6; }
+.ai-draft { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.ai-draft-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.ai-draft-head .counter { margin-left: auto; }
+.ai-draft-head .state.ok { color: var(--ok); font-size: .85rem; }
+.ai-draft textarea { width: 100%; resize: vertical; }
+.ai-draft p { margin: 0; }
+.ai-draft .err { color: var(--danger); }
+.ai-history { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.ai-history li { display: flex; align-items: flex-start; gap: 8px; padding: 8px 0; border-top: 1px solid var(--border); }
+.ai-history li:first-child { border-top: 0; }
+.ai-history-open {
+  flex: 1; min-width: 0; padding: 0; border: 0; background: none; color: var(--text);
+  font: inherit; text-align: left; cursor: pointer; overflow-wrap: anywhere;
+}
+.ai-history-open .meta { display: block; font-size: .8rem; color: var(--muted); }
+.ai-history li[aria-current="true"] .ai-history-open strong { color: var(--accent); }
+.small-icon { width: 30px; height: 30px; font-size: 1.1rem; flex: none; }
+.persona-body { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 16px; }
+.persona-side { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.persona-side p { margin: 4px 0 0; }
+.persona-list { list-style: none; margin: 0; padding: 0; width: 100%; display: flex; flex-direction: column; gap: 2px; }
+.persona-item {
+  width: 100%; padding: 7px 10px; border: 0; border-radius: var(--radius-sm); background: none;
+  color: var(--text); font: inherit; text-align: left; cursor: pointer;
+}
+.persona-item:hover { background: var(--surface-2); }
+.persona-item[aria-current="true"] { background: var(--surface-2); box-shadow: inset 3px 0 0 var(--accent); font-weight: 600; }
+.persona-edit { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+
 /* ---- toast ------------------------------------------------------------ */
 .toast {
   /* left + right + auto margins centre it; "left: 50%" alone left it only half the screen to wrap in. */
@@ -581,6 +654,7 @@ a.target-badge:hover { background: var(--surface-2); }
   .sidebar { display: grid; grid-template-columns: 1fr 1fr; align-items: start; }
   .social-layout { grid-template-columns: 180px minmax(0, 1fr); }
   .social-grid { grid-template-columns: minmax(0, 1fr); }
+  .ai-layout { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 760px) {
   .topbar { flex-wrap: wrap; padding: 10px 16px 0; gap: 8px; }
@@ -615,5 +689,9 @@ a.target-badge:hover { background: var(--surface-2); }
   .nav-avatar { width: 20px; height: 20px; }
   .profile-avatar { width: 44px; height: 44px; }
   .push-right { margin-left: 0; }
+  /* Six tabs fit a phone with the short label. */
+  .tab-long { display: none; }
+  .tab-short { display: inline; }
+  .persona-body { grid-template-columns: minmax(0, 1fr); }
 }
 @media (prefers-reduced-motion: reduce) { .toast, .analytics-body { transition: none; } }

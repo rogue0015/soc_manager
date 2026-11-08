@@ -1,11 +1,13 @@
 // Entry point: load data, set up the tabs and the top bar, render on every state change.
 
+import { initAI } from './ai.js';
 import { initAnalytics } from './analytics.js';
 import { initBlog, renderBlog } from './blog.js';
 import { renderCalendar, renderLegend } from './calendar.js';
 import { openComposer } from './composer.js';
 import { initConnections } from './connections.js';
 import { initHandoff } from './handoff.js';
+import { initMedia } from './media.js';
 import { initSocial } from './social.js';
 import { loadPlatforms, refreshPosts, setMonth, state, subscribe } from './state.js';
 import { initStatus } from './status.js';
@@ -45,6 +47,8 @@ async function start() {
   initStatus();
   initHandoff();
   initSocial();
+  initMedia(openComposer);
+  initAI();
   initAnalytics();
   initTabs();
   await Promise.all([refreshPosts(), initBlog()]);

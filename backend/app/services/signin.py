@@ -19,7 +19,7 @@ from datetime import datetime, timedelta
 
 from ..config import Settings, set_env_values
 from ..platforms import PLATFORMS, SIGN_IN, Publisher, build_publisher
-from ..platforms.linkedin import SignInError
+from ..platforms import SignInError
 from ..timeutil import now_utc
 from .activity import ActivityLog
 from .errors import InvalidInput, NotFound

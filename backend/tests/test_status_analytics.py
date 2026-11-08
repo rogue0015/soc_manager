@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timedelta, timezone
 
+from backend.app.platforms import PLATFORMS
 from backend.app.services import activity as activity_module
 from backend.app.services.monitor import MonitorService
 from backend.app.services.scheduler import SchedulerState, publish_due, run_scheduler
@@ -89,7 +90,7 @@ def test_system_reports_queue_and_flags_problems(app, client, fake_x):
     s = client.get("/api/system").json()
     assert s["queue"]["scheduled"] == 1 and s["queue"]["failed"] == 1
     assert s["queue"]["next_due_at"] == upcoming["scheduled_at"]
-    assert s["platforms"] == {"known": 8, "connected": 1}
+    assert s["platforms"] == {"known": len(PLATFORMS), "connected": 1}
     assert s["scheduler"]["enabled"] is False
     assert s["database"]["size_bytes"] > 0
     assert any("scheduler is off" in n for n in s["attention"])

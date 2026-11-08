@@ -18,6 +18,8 @@
     <nav class="tabs" role="tablist" aria-label="Sections">
       <button class="tab" type="button" role="tab" id="tab-status" aria-controls="panel-status" data-tab="status">Status</button>
       <button class="tab" type="button" role="tab" id="tab-social" aria-controls="panel-social" data-tab="social">Social</button>
+      <button class="tab" type="button" role="tab" id="tab-media" aria-controls="panel-media" data-tab="media">Media</button>
+      <button class="tab" type="button" role="tab" id="tab-ai" aria-controls="panel-ai" data-tab="ai"><span class="tab-long">AI generation</span><span class="tab-short">AI</span></button>
       <button class="tab" type="button" role="tab" id="tab-analytics" aria-controls="panel-analytics" data-tab="analytics">Analytics</button>
       <button class="tab" type="button" role="tab" id="tab-scheduler" aria-controls="panel-scheduler" data-tab="scheduler">Scheduler</button>
     </nav>
@@ -146,6 +148,89 @@
     </section>
 
     <!-- Analytics: what was published and how it went, with one row of filters -->
+    <!-- Media: the library of pictures and videos (js/media.js) -->
+    <section class="panel" id="panel-media" role="tabpanel" aria-labelledby="tab-media" hidden>
+      <div class="panel-head">
+        <h1>Media</h1>
+        <label class="btn btn-ghost btn-sm file-btn">Add picture…
+          <input type="file" id="lib-pic-file" accept="image/png,image/jpeg,image/gif"></label>
+        <label class="btn btn-primary btn-sm file-btn">Add video…
+          <input type="file" id="lib-video-file" accept="video/mp4,video/quicktime"></label>
+      </div>
+      <p class="muted small note">Upload a picture or video once, then use it in posts on every platform. Pictures are
+        cropped to each platform’s best shape when you attach them; “Crop a copy” saves a version for posting by hand.</p>
+      <div class="segmented" role="radiogroup" aria-label="Show">
+        <label><input type="radio" name="lib-kind" value="" checked> All</label>
+        <label><input type="radio" name="lib-kind" value="image"> Pictures</label>
+        <label><input type="radio" name="lib-kind" value="video"> Videos</label>
+      </div>
+      <p class="result" id="lib-result" role="status"></p>
+      <ul class="media-grid" id="lib-grid" aria-live="polite"></ul>
+    </section>
+
+    <!-- AI generation: drafts from an idea or a blog post, in a persona's style (js/ai.js, ADR 0012) -->
+    <section class="panel" id="panel-ai" role="tabpanel" aria-labelledby="tab-ai" hidden>
+      <div class="panel-head">
+        <h1>AI generation</h1>
+        <span class="muted small" id="ai-usage" aria-live="polite"></span>
+      </div>
+      <p class="form-error" id="ai-error" role="alert"></p>
+
+      <div class="ai-layout">
+        <form class="card ai-form" id="ai-form" novalidate aria-labelledby="ai-form-title">
+          <h2 id="ai-form-title">New post</h2>
+          <div class="segmented" role="radiogroup" aria-label="Start from">
+            <label><input type="radio" name="ai-source" value="idea" checked> My idea</label>
+            <label><input type="radio" name="ai-source" value="blog"> A blog post</label>
+          </div>
+          <label class="field" id="ai-blog-field" hidden><span>Blog post</span><select id="ai-blog"></select></label>
+          <label class="field"><span id="ai-idea-label">The idea</span>
+            <textarea id="ai-idea" rows="5" maxlength="8000"
+              placeholder="What do you want to say? A few lines is enough."></textarea></label>
+
+          <details class="ai-event" id="ai-event">
+            <summary>Event recap <span class="muted">(optional, becomes part of the post)</span></summary>
+            <div class="row two">
+              <label class="field"><span>Event</span><input type="text" id="ai-event-name" maxlength="200" placeholder="e.g. DevFest Harare"></label>
+              <label class="field"><span>Day</span><input type="text" id="ai-event-day" maxlength="100" placeholder="e.g. Saturday 8 November"></label>
+            </div>
+            <label class="field"><span>Venue</span><input type="text" id="ai-event-venue" maxlength="200"></label>
+            <label class="field"><span>Notable takeaways</span>
+              <textarea id="ai-event-takeaways" rows="3" maxlength="4000" placeholder="One per line"></textarea></label>
+          </details>
+
+          <fieldset class="field">
+            <legend>Platforms</legend>
+            <label class="check small"><input type="checkbox" id="ai-all"> All platforms</label>
+            <div class="platform-picks" id="ai-platforms"></div>
+          </fieldset>
+
+          <div class="ai-persona-row">
+            <label class="field"><span>Persona</span><select id="ai-persona"></select></label>
+            <button class="btn btn-ghost btn-sm" type="button" id="ai-personas-btn">Manage personas</button>
+          </div>
+
+          <button class="btn btn-primary" type="submit" id="ai-generate">Generate drafts</button>
+          <p class="muted small note">Gemini writes the drafts from what you give it here. Nothing is posted:
+            open a draft in the post window, then schedule or post it yourself.</p>
+        </form>
+
+        <div class="ai-results">
+          <section class="card" aria-labelledby="ai-drafts-title">
+            <div class="section-head">
+              <h2 id="ai-drafts-title">Drafts</h2>
+              <span class="muted small" id="ai-drafts-meta"></span>
+            </div>
+            <div class="ai-drafts" id="ai-drafts" aria-live="polite"></div>
+          </section>
+          <section class="card" aria-labelledby="ai-history-title">
+            <h2 id="ai-history-title">History</h2>
+            <ul class="ai-history" id="ai-history"></ul>
+          </section>
+        </div>
+      </div>
+    </section>
+
     <section class="panel" id="panel-analytics" role="tabpanel" aria-labelledby="tab-analytics" hidden>
       <div class="panel-head">
         <h1>Analytics</h1>
@@ -269,6 +354,50 @@
     </section>
   </main>
 
+  <!-- Personas for AI generation (js/personas.js) -->
+  <dialog id="persona-dialog" class="wide" aria-labelledby="persona-title">
+    <form method="dialog" id="persona-form" novalidate>
+      <header class="dialog-head">
+        <h2 id="persona-title">Personas</h2>
+        <button class="icon-btn" type="button" data-close aria-label="Close">×</button>
+      </header>
+      <div class="dialog-body persona-body">
+        <div class="persona-side">
+          <ul class="persona-list" id="persona-list" aria-label="Your personas"></ul>
+          <button class="btn btn-ghost btn-sm" type="button" id="persona-new">+ New persona</button>
+          <button class="btn btn-ghost btn-sm" type="button" id="persona-starters">Add starter personas</button>
+          <p class="muted small">A persona says how posts sound. Lengths come from each platform, so any persona
+            works anywhere.</p>
+        </div>
+        <div class="persona-edit">
+          <label class="field"><span>Name</span><input type="text" id="persona-name" maxlength="80" placeholder="e.g. Community Builder"></label>
+          <label class="field"><span>Tone</span><textarea id="persona-tone" rows="2" placeholder="Warm, confident, a little self-deprecating humour"></textarea></label>
+          <label class="field"><span>Voice and audience</span><textarea id="persona-voice" rows="2" placeholder="First person; speaks to developers and community organisers"></textarea></label>
+          <label class="field"><span>Language</span><textarea id="persona-language" rows="2" placeholder="English (UK spelling); occasional Shona phrases are fine"></textarea></label>
+          <label class="field"><span>Format</span><textarea id="persona-format" rows="2" placeholder="Hook in the first line; short paragraphs; one clear lesson; end with a question"></textarea></label>
+          <div class="row two">
+            <label class="field"><span>Hashtags</span><textarea id="persona-hashtags" rows="2" placeholder="2–3 at the end, lowercase"></textarea></label>
+            <label class="field"><span>Emoji</span><textarea id="persona-emoji" rows="2" placeholder="At most 2, never in the first line"></textarea></label>
+          </div>
+          <label class="field"><span>Always</span><textarea id="persona-always" rows="2" placeholder="Credit people and organisations by name; link the blog post if there is one"></textarea></label>
+          <label class="field"><span>Never</span><textarea id="persona-never" rows="2" placeholder="Buzzwords, clickbait, invented facts or numbers"></textarea></label>
+          <label class="field"><span>Example post <span class="muted">(optional; Gemini copies its style, not its content)</span></span>
+            <textarea id="persona-example" rows="4" placeholder="Paste one of your real posts"></textarea></label>
+          <p class="form-error" id="persona-error" role="alert"></p>
+        </div>
+      </div>
+      <footer class="dialog-foot">
+        <button class="btn btn-danger" type="button" id="persona-delete">Delete</button>
+        <button class="btn btn-ghost" type="button" id="persona-duplicate">Duplicate</button>
+        <span class="spacer"></span>
+        <span class="foot-actions">
+          <button class="btn btn-ghost" type="button" data-close>Close</button>
+          <button class="btn btn-primary" type="submit" id="persona-save">Save persona</button>
+        </span>
+      </footer>
+    </form>
+  </dialog>
+
   <!-- Compose / edit a post -->
   <dialog id="composer" aria-labelledby="composer-title">
     <form method="dialog" id="composer-form" novalidate>
@@ -301,6 +430,41 @@
           <div class="platform-picks" id="platform-picks"></div>
         </fieldset>
 
+        <!-- A picture or video for every platform that takes one (js/post-media.js) -->
+        <fieldset class="field platform-options" id="media-options">
+          <legend>Picture or video</legend>
+          <p class="muted small">Optional. YouTube, TikTok and Instagram need a video; pictures are cropped for each platform.</p>
+          <div class="row wrap">
+            <label class="btn btn-ghost btn-sm file-btn">Add picture…
+              <input type="file" id="media-pic-file" accept="image/png,image/jpeg,image/gif"></label>
+            <label class="btn btn-ghost btn-sm file-btn">Add video…
+              <input type="file" id="media-video-file" accept="video/mp4,video/quicktime"></label>
+            <button class="btn btn-ghost btn-sm" type="button" id="media-library">From library…</button>
+            <button class="btn btn-ghost btn-sm" type="button" id="media-recrop" hidden>Adjust crops…</button>
+            <button class="btn btn-ghost btn-sm" type="button" id="media-remove" hidden>Remove</button>
+          </div>
+          <p class="muted small" id="media-status" aria-live="polite"></p>
+          <div class="media-attached" id="media-preview"></div>
+          <ul class="media-fit" id="media-fit"></ul>
+          <label class="field" id="media-alt-field" hidden>
+            <span>Describe it <span class="muted">(read aloud by screen readers)</span></span>
+            <input type="text" id="media-alt" maxlength="300"></label>
+          <div class="stack" id="video-options" hidden>
+            <label class="field" id="yt-title-field" hidden>
+              <span>YouTube title <span class="muted">(up to 100 characters; empty = first line of the text)</span></span>
+              <input type="text" id="yt-title" maxlength="100"></label>
+            <label class="field" id="video-privacy-field" hidden><span>Who can see the video</span>
+              <select id="video-privacy">
+                <option value="public">Everyone</option>
+                <option value="unlisted">Unlisted (YouTube: anyone with the link; TikTok: friends)</option>
+                <option value="private">Only me</option>
+              </select></label>
+            <label class="field" id="yt-tags-field" hidden>
+              <span>YouTube tags <span class="muted">(comma-separated)</span></span>
+              <input type="text" id="yt-tags" maxlength="500"></label>
+          </div>
+        </fieldset>
+
         <!-- Shown when LinkedIn is chosen (js/post-options.js) -->
         <fieldset class="field platform-options" id="li-options" hidden>
           <legend><span class="swatch" id="li-swatch" aria-hidden="true"></span> LinkedIn options</legend>
@@ -323,21 +487,12 @@
             <span id="li-attach-label">Attach</span>
             <div class="segmented" role="radiogroup" aria-labelledby="li-attach-label">
               <label><input type="radio" name="li-attach" value="none" checked> Nothing</label>
-              <label><input type="radio" name="li-attach" value="image"> Image</label>
+              <label><input type="radio" name="li-attach" value="image"> Picture or video</label>
               <label><input type="radio" name="li-attach" value="link_card"> Link preview</label>
             </div>
           </div>
-          <div class="image-pick" id="li-image-box" hidden>
-            <div class="row">
-              <label class="btn btn-ghost btn-sm file-btn">Choose image…
-                <input type="file" id="li-image-file" accept="image/png,image/jpeg,image/gif"></label>
-              <span class="muted small" id="li-image-status">JPEG, PNG or GIF, up to 8 MB</span>
-            </div>
-            <img id="li-image-preview" alt="" hidden>
-            <label class="field"><span>Describe the image <span class="muted">(read aloud by screen readers)</span></span>
-              <input type="text" id="li-image-alt" maxlength="300"></label>
-          </div>
           <p class="muted small" id="li-card-note" hidden>LinkedIn shows the link as a card with the page’s title, summary and picture.</p>
+          <p class="muted small" id="li-media-note" hidden>LinkedIn gets the picture (cropped for LinkedIn) or video from “Picture or video” above.</p>
           <div class="row two">
             <label class="field"><span>Who can see it</span>
               <select id="li-visibility">
@@ -392,6 +547,43 @@
   </dialog>
 
   <!-- Hand a post to LinkedIn's own scheduler (js/handoff.js) -->
+  <!-- Crop a picture for each platform (js/cropper.js) -->
+  <dialog id="crop-dialog" class="wide" aria-labelledby="crop-title">
+    <form method="dialog" id="crop-form" novalidate>
+      <header class="dialog-head">
+        <h2 id="crop-title">Crop for each platform</h2>
+        <button class="icon-btn" type="button" data-close aria-label="Close">×</button>
+      </header>
+      <div class="dialog-body">
+        <div class="segmented crop-tabs" id="crop-platforms" role="radiogroup" aria-label="Platform"></div>
+        <div class="row wrap" id="crop-formats" role="radiogroup" aria-label="Shape"></div>
+        <div class="crop-stage" id="crop-stage">
+          <canvas id="crop-canvas" tabindex="0" aria-label="Crop area. Drag or use the arrow keys to move the picture; + and − zoom."></canvas>
+        </div>
+        <label class="field"><span>Zoom</span><input type="range" id="crop-zoom" min="1" max="4" step="0.01" value="1"></label>
+        <p class="muted small" id="crop-out" aria-live="polite"></p>
+      </div>
+      <footer class="dialog-foot">
+        <span class="spacer"></span>
+        <button class="btn btn-ghost" type="button" data-close>Cancel</button>
+        <button class="btn btn-primary" type="submit" id="crop-done">Use these crops</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <!-- Pick a picture or video from the library (js/media.js) -->
+  <dialog id="library-dialog" class="wide" aria-labelledby="library-title">
+    <form method="dialog" novalidate>
+      <header class="dialog-head">
+        <h2 id="library-title">Choose from the library</h2>
+        <button class="icon-btn" type="button" data-close aria-label="Close">×</button>
+      </header>
+      <div class="dialog-body">
+        <ul class="media-grid compact" id="library-pick"></ul>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="handoff-dialog" aria-labelledby="handoff-title">
     <form method="dialog" novalidate>
       <header class="dialog-head">

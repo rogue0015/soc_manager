@@ -12,7 +12,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from . import bluesky, devto, linkedin, x
+from . import bluesky, devto, instagram, linkedin, tiktok, x, youtube
 from .base import Connector, PlatformInfo, Publisher
 
 META_APPS = "https://developers.facebook.com/apps"
@@ -27,18 +27,15 @@ CONNECTORS: dict[str, Connector] = {
         note="Not built yet. Posts can go to a Facebook Page only, not a personal profile, "
              "and the Meta app needs review.",
     ),
-    "instagram": Connector(
-        auth="Meta app + Instagram professional account",
-        portal_url=META_APPS,
-        note="Not built yet. Needs a business or creator account linked to a Facebook Page, "
-             "and every Instagram post needs an image or video.",
-    ),
+    "instagram": instagram.CONNECTOR,
     "threads": Connector(
         auth="Meta app (Threads API)",
         portal_url=META_APPS,
         note="Not built yet. Posts through the Threads API with a Meta app.",
     ),
     "bluesky": bluesky.CONNECTOR,
+    "youtube": youtube.CONNECTOR,
+    "tiktok": tiktok.CONNECTOR,
     "mastodon": Connector(
         auth="Access token from your server",
         note="Not built yet. Create the token on your server under Preferences → Development, "

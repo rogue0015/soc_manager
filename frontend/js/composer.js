@@ -2,6 +2,7 @@
 
 import { api } from './api.js';
 import { fillDevtoOptions, initDevtoOptions, readDevtoOptions, showDevtoOptions } from './devto-options.js';
+import { fillMedia, initPostMedia, readMedia, showMedia } from './post-media.js';
 import { openHandoff } from './handoff.js';
 import { renderTargets } from './live.js';
 import {
@@ -21,6 +22,7 @@ const body = $('post-body');
 const blogPick = $('blog-pick');
 
 let editing = null;      // the post being edited, or null when creating
+let afterSave = null;    // called with the saved post (AI tab: remember which draft became a post)
 let autoText = null;     // last text we generated from a blog post (so we know if the user edited it)
 let autoLiText = null;   // same, for LinkedIn's own version
 
@@ -135,11 +137,14 @@ function nameList(ids) {
 /**
  * openComposer({ date })          new post on a day
  * openComposer({ post })          view / edit an existing post
+ * openComposer({ media })         new post with a library picture or video (Media tab)
  * openComposer({ blog, date? })   new post prefilled from a blog post
  * openComposer({ platform })      new post for one platform (Social tab)
+ * openComposer({ platform, text, blog?, onSaved })  a ready-written draft (AI tab)
  */
-export function openComposer({ date, post, blog, platform } = {}) {
+export function openComposer({ date, post, blog, platform, media, text, onSaved } = {}) {
   editing = post ?? null;
+  afterSave = onSaved ?? null;
   autoText = null;
   autoLiText = null;
   $('composer-error').textContent = '';
@@ -164,6 +169,7 @@ export function openComposer({ date, post, blog, platform } = {}) {
   renderPlatformPicks($('platform-picks'), platforms, () => {
     prefs.set('lastPlatforms', selectedPlatforms());
     showPostOptions(selectedPlatforms());
+    showMedia(selectedPlatforms());
     showArticleOptions();
     fillFromBlog();
     updateCounters();
@@ -172,12 +178,15 @@ export function openComposer({ date, post, blog, platform } = {}) {
   const blogUrl = post?.blog_url ?? blog?.url ?? '';
   showPostOptions(platforms);
   fillPostOptions(post?.targets.find((t) => t.platform === 'linkedin'), { blog: Boolean(blogUrl) });
+  showMedia(platforms);
+  fillMedia(post, media);
   fillDevtoOptions(post?.targets.find((t) => t.platform === 'devto'));
   renderBlogOptions(blogUrl);
   setSource(blogUrl ? 'blog' : 'custom');
   showArticleOptions();
   body.value = post?.body ?? '';
-  if (blog) fillFromBlog();
+  if (text != null) body.value = text;   // a written draft wins over the blog's own text
+  else if (blog) fillFromBlog();
 
   renderDayPosts(day);
   renderTargetStatus(post);
@@ -186,6 +195,7 @@ export function openComposer({ date, post, blog, platform } = {}) {
     $('li-options').hidden = true;
     $('devto-options').hidden = true;
   }
+  $('media-options').hidden = Boolean(published);
   updateCounters();
 
   if (!dialog.open) dialog.showModal();
@@ -205,6 +215,7 @@ form.querySelectorAll('input[name=source]').forEach((r) => r.addEventListener('c
   }
 }));
 initPostOptions(updateCounters);
+initPostMedia(updateCounters);
 initDevtoOptions(chosenBlogUrl);
 dialog.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', () => dialog.close()));
 
@@ -227,6 +238,9 @@ function readForm({ now = false } = {}) {
     .filter((id) => id !== 'linkedin' && state.byId[id].features.includes('link_card')
       && (chosenBlogUrl() || /https?:\/\//.test(body.value)))
     .map((id) => [id, { attachment: 'link_card' }]));
+  const base = { ...cards, ...extra.options, ...devto.options };
+  const attached = readMedia(platforms, base);
+  if (attached.error) return { error: attached.error };
   return {
     payload: {
       body: body.value,
@@ -234,7 +248,7 @@ function readForm({ now = false } = {}) {
       platforms,
       blog_url: chosenBlogUrl(),
       variants: extra.variants,
-      options: { ...cards, ...extra.options, ...devto.options },
+      options: { ...base, ...attached.options },
     },
   };
 }
@@ -251,6 +265,7 @@ form.addEventListener('submit', async (e) => {
   save.disabled = true;
   try {
     const saved = editing ? await api.updatePost(editing.id, payload) : await api.createPost(payload);
+    afterSave?.(saved);
     dialog.close();
     // LinkedIn's own scheduler posts it: show how to hand the text over.
     const handoff = saved.targets.find((t) => t.options?.handoff && t.status === 'scheduled');
@@ -289,6 +304,7 @@ $('post-now').addEventListener('click', async () => {
   try {
     const saved = editing ? await api.updatePost(editing.id, payload) : await api.createPost(payload);
     editing = saved;   // if sending fails, trying again updates this post instead of making a second one
+    afterSave?.(saved);
     const sent = await api.publishNow(saved.id);
     const failed = sent.targets.filter((t) => t.status === 'failed').map((t) => t.platform);
     const posted = sent.targets.filter((t) => t.status === 'published').map((t) => t.platform);

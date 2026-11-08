@@ -16,6 +16,7 @@ See docs/decisions/0003-linkedin-sign-in.md and 0005-sign-in-from-the-app.md.
 from __future__ import annotations
 
 import re
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -25,6 +26,7 @@ import requests
 
 from ..timeutil import now_utc, to_utc_iso
 from .base import (
+    SignInError, VideoFile,
     URL_RE, AccountProfile, AccountStatus, Connector, Credential, ImageFile, PostExtras, PublishError, PublishResult,
     Publisher,
 )
@@ -50,6 +52,8 @@ STAT_QUERIES = {
     "comments": "COMMENT", "reshares": "RESHARE", "saves": "POST_SAVE", "link_clicks": "LINK_CLICKS",
 }
 VISIBILITIES = ("PUBLIC", "CONNECTIONS")
+VIDEO_MAX_BYTES = 500 * 1024 * 1024
+VIDEO_WAIT_SECONDS = 300
 DEFAULT_REDIRECT_URI = "http://localhost:8765/linkedin/callback"
 TIMEOUT = 20
 SIGN_IN_AGAIN = "Open the Status tab and sign in again on the LinkedIn card."
@@ -119,8 +123,6 @@ def _parse_time(value: str | None) -> datetime | None:
 
 # ---- sign-in (used by services/signin.py and scripts/linkedin_login.py) ------
 
-class SignInError(Exception):
-    """The LinkedIn sign-in could not be completed. The message is shown to the user."""
 
 
 @dataclass(frozen=True)
@@ -211,6 +213,7 @@ class LinkedInPublisher(Publisher):
         self._expires_at = _parse_time(secrets.get("LINKEDIN_TOKEN_EXPIRES_AT"))
         self._granted = set(_split_scopes(secrets.get("LINKEDIN_GRANTED_SCOPES")))
         self._now = now
+        self._sleep = time.sleep
         self._member: dict | None = None  # who the token belongs to; fixed for its lifetime
 
     def _expired(self) -> str | None:
@@ -273,7 +276,12 @@ class LinkedInPublisher(Publisher):
                 "lifecycleState": "PUBLISHED",
                 "isReshareDisabledByAuthor": not extras.allow_reshare,
             }
-            if extras.image:
+            if extras.video:
+                media = {"id": self._upload_video(extras.video, author)}
+                if extras.title:
+                    media["title"] = extras.title
+                body["content"] = {"media": media}
+            elif extras.image:
                 media = {"id": self._upload_image(extras.image, author)}
                 if extras.image.alt:
                     media["altText"] = extras.image.alt
@@ -305,6 +313,50 @@ class LinkedInPublisher(Publisher):
             except PublishError as exc:
                 warnings.append(f"The first comment wasn't added: {exc}")
         return PublishResult(external_id=urn, external_url=url, warning=" ".join(warnings) or None)
+
+    def _upload_video(self, video: VideoFile, owner: str) -> str:
+        """Upload a video in the parts LinkedIn asks for, then wait until it's processed.
+        Returns its urn:li:video for the post."""
+        if video.size > VIDEO_MAX_BYTES:
+            raise PublishError(f"LinkedIn takes videos up to 500 MB; this one is {video.size / 1048576:.0f} MB.")
+        if video.duration_ms and not 3000 <= video.duration_ms <= 30 * 60 * 1000:
+            raise PublishError("LinkedIn takes videos from 3 seconds to 30 minutes long.")
+        init = requests.post(f"{API}/rest/videos?action=initializeUpload", headers=self._headers(), timeout=TIMEOUT,
+                             json={"initializeUploadRequest": {"owner": owner, "fileSizeBytes": video.size,
+                                                               "uploadCaptions": False, "uploadThumbnail": False}})
+        if not init.ok:
+            raise PublishError(f"LinkedIn didn't accept the video. {self._problem(init)}")
+        value = init.json()["value"]
+        etags = []
+        for part in value["uploadInstructions"]:
+            put = requests.put(part["uploadUrl"], data=video.read(part["firstByte"], part["lastByte"] + 1),
+                               headers={"Content-Type": "application/octet-stream"}, timeout=300)
+            if not put.ok or not put.headers.get("etag"):
+                raise PublishError(f"Uploading the video to LinkedIn failed. {_explain(put)}")
+            etags.append(put.headers["etag"])
+        done = requests.post(f"{API}/rest/videos?action=finalizeUpload", headers=self._headers(), timeout=TIMEOUT,
+                             json={"finalizeUploadRequest": {"video": value["video"],
+                                                             "uploadToken": value.get("uploadToken", ""),
+                                                             "uploadedPartIds": etags}})
+        if not done.ok:
+            raise PublishError(f"LinkedIn couldn't finish the video upload. {self._problem(done)}")
+        self._wait_for_video(value["video"])
+        return value["video"]
+
+    def _wait_for_video(self, urn: str) -> None:
+        """LinkedIn refuses a post whose video is still processing, so wait (up to a few minutes)."""
+        deadline = time.monotonic() + VIDEO_WAIT_SECONDS
+        while True:
+            resp = requests.get(f"{API}/rest/videos/{_path_urn(urn)}", headers=self._headers(), timeout=TIMEOUT)
+            status = resp.json().get("status") if resp.ok else None
+            if status == "AVAILABLE":
+                return
+            if status == "PROCESSING_FAILED":
+                reason = resp.json().get("processingFailureReason", "no reason given")
+                raise PublishError(f"LinkedIn couldn't process the video ({reason}). Check it's an MP4 file.")
+            if time.monotonic() > deadline:
+                raise PublishError("LinkedIn is taking too long to process the video. Retry in a few minutes.")
+            self._sleep(5)
 
     def _upload_image(self, image: ImageFile, owner: str) -> str:
         """Upload an image owned by you; returns its urn:li:image for use in a post."""

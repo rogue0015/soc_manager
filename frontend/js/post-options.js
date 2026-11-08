@@ -4,15 +4,12 @@
 // over (js/handoff.js), so the other options are hidden. The values go to the API as
 // variants.linkedin and options.linkedin; the backend checks them again (services/posts.py).
 
-import { api } from './api.js';
 import { state } from './state.js';
 import { prefs } from './util.js';
 
 const $ = (id) => document.getElementById(id);
 const LI = 'linkedin';
 
-let imageId = null;
-let uploading = false;
 let onChange = () => {};
 
 const attachment = () => document.querySelector('input[name=li-attach]:checked').value;
@@ -34,34 +31,8 @@ const setAttachment = (value) => {
 };
 
 function showAttachment() {
-  $('li-image-box').hidden = attachment() !== 'image';
   $('li-card-note').hidden = attachment() !== 'link_card';
-}
-
-function showImage(url) {
-  const img = $('li-image-preview');
-  img.hidden = !url;
-  if (url) img.src = url; else img.removeAttribute('src');
-}
-
-async function uploadImage(e) {
-  const file = e.target.files[0];
-  e.target.value = '';
-  if (!file) return;
-  const status = $('li-image-status');
-  uploading = true;
-  status.textContent = 'Uploading…';
-  try {
-    const media = await api.uploadMedia(file);
-    imageId = media.id;
-    showImage(media.url);
-    status.textContent = file.name;
-    if (!$('li-image-alt').value) $('li-image-alt').focus();
-  } catch (ex) {
-    status.textContent = ex.message;
-  } finally {
-    uploading = false;
-  }
+  $('li-media-note').hidden = attachment() !== 'image';
 }
 
 /** The text LinkedIn will get: its own version if written, else the main text. */
@@ -85,13 +56,18 @@ export function fillPostOptions(target, { blog = false } = {}) {
   $('li-visibility').value = o.visibility ?? prefs.get('liVisibility', 'PUBLIC');
   $('li-reshare').checked = o.allow_reshare ?? prefs.get('liReshare', true);
   $('li-comment').value = o.first_comment ?? '';
-  $('li-image-alt').value = o.image_alt ?? '';
-  imageId = o.image_id ?? null;
-  showImage(imageId ? `/api/media/${imageId}` : null);
-  $('li-image-status').textContent = imageId ? 'Image attached' : 'JPEG, PNG or GIF, up to 8 MB';
-  setAttachment(o.attachment ?? (blog ? 'link_card' : 'none'));
+  // "image" here means "the picture or video from the shared section", whichever it is.
+  setAttachment(o.attachment === 'video' ? 'image' : (o.attachment ?? (blog ? 'link_card' : 'none')));
   setSender((target ? o.handoff : prefs.get('liHandoff', false)) ? 'linkedin' : 'app');
 }
+
+/** A picture or video was added: LinkedIn uses it unless something else was chosen on purpose. */
+export function suggestLinkedinMedia() {
+  if (attachment() === 'none' && !isHandoff()) setAttachment('image');
+}
+
+/** Does LinkedIn want the shared picture or video? */
+export const linkedinWantsMedia = () => !isHandoff() && attachment() === 'image';
 
 /** Blog posts default to a link preview (unless something else was chosen). */
 export function suggestLinkCard() {
@@ -110,8 +86,6 @@ export function readPostOptions(platformIds, mainText) {
   const variants = own !== mainText ? { [LI]: own } : {};
   prefs.set('liHandoff', isHandoff());
   if (isHandoff()) return { variants, options: { [LI]: { handoff: true } } };
-  if (uploading) return { error: 'Wait for the image to finish uploading.' };
-  if (attachment() === 'image' && !imageId) return { error: 'Choose an image for LinkedIn, or attach nothing.' };
   prefs.set('liVisibility', $('li-visibility').value);
   prefs.set('liReshare', $('li-reshare').checked);
   return {
@@ -120,9 +94,8 @@ export function readPostOptions(platformIds, mainText) {
       [LI]: {
         visibility: $('li-visibility').value,
         allow_reshare: $('li-reshare').checked,
+        // "image" = use the shared picture or video; composer.js fills in which (post-media.js).
         attachment: attachment(),
-        image_id: attachment() === 'image' ? imageId : null,
-        image_alt: $('li-image-alt').value.trim(),
         first_comment: $('li-comment').value.trim(),
       },
     },
@@ -132,7 +105,6 @@ export function readPostOptions(platformIds, mainText) {
 export function initPostOptions(changed) {
   onChange = changed;
   $('li-text').addEventListener('input', () => onChange());
-  $('li-image-file').addEventListener('change', uploadImage);
   document.querySelectorAll('input[name=li-attach]').forEach((r) => r.addEventListener('change', showAttachment));
   document.querySelectorAll('input[name=li-sender]').forEach((r) => r.addEventListener('change', showSender));
 }

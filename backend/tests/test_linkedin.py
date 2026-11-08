@@ -30,6 +30,7 @@ class FakeResponse:
         self.ok = status < 400
         self._body = body
         self.text = str(body)
+        self.content = b"" if body is None else self.text.encode()
         self.headers = CaseInsensitiveDict(headers or {})
 
     def json(self):

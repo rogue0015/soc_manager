@@ -16,7 +16,7 @@ function detailFrom(body, status) {
   return `Request failed (HTTP ${status})`;
 }
 
-async function request(method, path, data) {
+export async function request(method, path, data) {
   const opts = { method, headers: {} };
   if (data !== undefined) {
     opts.headers['Content-Type'] = 'application/json';
@@ -49,6 +49,25 @@ async function upload(path, file) {
   return body;
 }
 
+// fetch() can't report upload progress, so library uploads use XMLHttpRequest.
+function uploadWithProgress(path, file, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', path);
+    xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+    xhr.upload.onprogress = (e) => { if (onProgress && e.lengthComputable) onProgress(e.loaded / e.total); };
+    xhr.onerror = () => reject(new ApiError('Can’t reach the server. Is it running?', 0));
+    xhr.onload = () => {
+      let body = null;
+      try { body = JSON.parse(xhr.responseText); } catch { /* not JSON */ }
+      if (xhr.status === 413) reject(new ApiError('That file is too large (videos up to 1 GB).', 413));
+      else if (xhr.status >= 400) reject(new ApiError(detailFrom(body, xhr.status), xhr.status));
+      else resolve(body);
+    };
+    xhr.send(file);
+  });
+}
+
 export const api = {
   platforms: () => request('GET', '/api/platforms'),
   platformStatus: (id) => request('GET', `/api/platforms/${id}/status`),
@@ -67,7 +86,11 @@ export const api = {
   deleteLive: (id, platform) => request('DELETE', `/api/posts/${id}/published/${platform}`),
 
   /** Images and analytics files go up as the raw request body. */
-  uploadMedia: (file) => upload('/api/media', file),
+  /** Add a picture or video to the library. onProgress(0..1) reports the upload (videos can be big). */
+  uploadMedia: (file, name = file.name ?? '', onProgress = null) =>
+    uploadWithProgress(`/api/media?name=${encodeURIComponent(name)}`, file, onProgress),
+  listMedia: (kind = '') => request('GET', `/api/media${kind ? `?kind=${kind}` : ''}`),
+  deleteMedia: (id) => request('DELETE', `/api/media/${id}`),
   statsStatus: () => request('GET', '/api/stats'),
   refreshStats: () => request('POST', '/api/stats/refresh'),
   importStats: (file) => upload('/api/stats/import', file),

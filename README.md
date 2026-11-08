@@ -21,6 +21,7 @@ _Last updated: 2026-11-08_
 |---|---|---|
 | Tabs: Status · Social · Analytics · Scheduler | ✅ Done | Links work (`#status`, `#social`, `#analytics`, `#scheduler`); the last tab is remembered. |
 | Social tab | ✅ Done | Sidebar of your signed-in accounts (picture, handle); for each: a profile card with followers / following / posts where shared, coming up, stats and best posts, past posts, import / refresh stats, reports. |
+| AI generation | ✅ Done | Gemini 3.1 Flash-Lite writes a draft per platform from an idea or a blog post (+ optional event recap) in a persona's style; review, then open in the post window. Personas, history, rate limits ([AI generation](#ai-generation)). |
 | Post now | ✅ Done | **Post now** in the post window sends to the ticked platforms straight away (asks first) and shows each platform's result. |
 | LinkedIn's own scheduler | ✅ Done (one step in LinkedIn) | *Who posts it: LinkedIn's scheduler*: the app copies the text and opens LinkedIn, you set the time there; it goes out even with this computer off. LinkedIn's API can't schedule posts itself. |
 | Past LinkedIn stats | ✅ By import | LinkedIn's analytics export adds past posts (not sent by this app) with their numbers. |
@@ -44,8 +45,14 @@ _Last updated: 2026-11-08_
 | Test post | ✅ Done | Connections card: pick a connected platform, edit the message, post. (X still waits on the blocker above.) |
 | Bluesky connection | ✅ Connected | Posts to your Bluesky account with clickable links and hashtags and a link preview card; **Delete on Bluesky**; likes, reposts and replies via **Refresh stats** ([Bluesky setup](#bluesky-setup)). |
 | Website stats link | ✅ Done | Social tab → *Your website* → **Website stats** opens rogue0015.goatcounter.com. |
-| Facebook, Instagram, Threads, Mastodon | 🕓 Planned | Can already be planned on the calendar; marked *failed: not connected* when due. |
-| Images / media | 🕓 Planned | |
+| Facebook, Threads, Mastodon | 🕓 Planned | Can already be planned on the calendar; marked *failed: not connected* when due. |
+| Media library + Media tab | ✅ Done | Pictures (≤ 8 MB) and videos (MP4/MOV ≤ 1 GB) uploaded once, reused across platforms; shows size, shape, length and where each is used. |
+| Picture cropper | ✅ Done | One crop per platform in its best shape (LinkedIn 1200×627, Bluesky ≤ 1 MB, …), compressed to fit. *Crop a copy* saves versions for posting by hand. |
+| Video posts: LinkedIn, Bluesky | ✅ Done | Attach a library video; the post dialog warns when it's too long or too large. |
+| YouTube (Shorts and videos) | ✅ Built, needs sign-in | Sign in with Google from the Status tab ([setup](#youtube-setup)). Uploads stay **private** until Google audits the project. |
+| TikTok | ✅ Built, needs sign-in | Sign in from the Status tab ([setup](#tiktok-setup)). Posts are private until TikTok audits the app; needs an https redirect. |
+| Instagram Reels | ⚠️ Built, inactive | Needs Meta's review and an https redirect URL ([setup](#instagram-setup)). Photos not supported (Instagram fetches them from a public URL). |
+| Video trimming / reshaping | ✖ Not planned | Declined: it would add ffmpeg to the image. |
 | Always-on hosting | 🚧 Partly | In Docker, posts go out whenever this machine and Docker are on. Remote hosting is planned. |
 
 Legend: ✅ done · ⚠️ blocked · 🚧 in progress · 🕓 planned
@@ -107,8 +114,17 @@ databases (`./data/` and the `sm-data` volume).
 
 ## Using it
 
-Four tabs at the top: **Status** (is everything working?), **Social** (one account at a
-time), **Analytics** (how did posts do?) and **Scheduler** (plan and schedule).
+- **Pictures and videos:** in a post, *Picture or video* → **Add picture…**, **Add video…** or
+  **From library…**. A picture opens the cropper: one tab per platform that posts pictures,
+  its best shapes first; drag, zoom (slider, wheel or `+`/`−`), **Use these crops**. A video
+  goes to every ticked platform that takes video; the list under it says what each will do
+  (e.g. *YouTube becomes a Short*) or why it won't fit. YouTube, TikTok and Instagram need a video.
+- **Media tab:** everything you've uploaded, newest first, with what uses it. **New post with
+  this**, **Crop a copy…** (saves a version per platform, e.g. for Instagram by hand), download, delete.
+
+Five tabs at the top: **Status** (is everything working?), **Social** (one account at a
+time), **Media** (your pictures and videos), **Analytics** (how did posts do?) and
+**Scheduler** (plan and schedule).
 **+ New post** works from any tab.
 
 - **Social:** pick an account in the sidebar (on phones: the row of buttons at the top). Signed-in
@@ -130,6 +146,10 @@ time), **Analytics** (how did posts do?) and **Scheduler** (plan and schedule).
 - **Analytics:** pick a period, platform, source and status in the filter row; every
   number, the chart, the platform table and the post list follow it. Hover the chart,
   or focus it and use `←` / `→`, to read each day; *Show as a table* lists them all.
+- **AI generation:** pick *My idea* or *A blog post*, add the event recap if it was an event, tick
+  platforms (or *All platforms*), pick a persona → **Generate drafts**. Edit each draft, then
+  **Open in post window** to schedule or post it. **Regenerate** rewrites one platform's draft;
+  **Manage personas** adds, edits and duplicates personas. Past generations are under *History*.
 - **Post now:** write the post, tick platforms → **Post now** → confirm. It goes out straight away;
   if a platform fails, the post stays open showing why, with **Retry failed**. Also works on a
   scheduled post: open it → **Post now**.
@@ -208,7 +228,8 @@ Decisions and their reasons: [docs/decisions/](docs/decisions/)
 [0007: dev.to articles](docs/decisions/0007-devto-articles.md),
 [0008: Social tab, LinkedIn's scheduler, reports](docs/decisions/0008-social-tab-handoff-reports.md),
 [0009: Bluesky](docs/decisions/0009-bluesky.md),
-[0010: Post now, account profiles](docs/decisions/0010-post-now-and-profiles.md)).
+[0010: Post now, account profiles](docs/decisions/0010-post-now-and-profiles.md),
+[0012: AI generation](docs/decisions/0012-ai-generation.md)).
 
 ### Data model
 
@@ -221,10 +242,19 @@ Decisions and their reasons: [docs/decisions/](docs/decisions/)
   `warning` (went out, but e.g. the first comment didn't), `removed_at` (deleted on the platform from the app),
   `edited_at`, and `imported_at` (a past post read from the platform's export, not sent by the app;
   [ADR 0008](docs/decisions/0008-social-tab-handoff-reports.md)).
-- **media**: uploaded images (`id`, `mime`, `size`); files live in `data/media/` (Docker: `/data/media`).
+- **media**: the media library (`id`, `mime`, `size`, `kind` image/video, `name`, `width`, `height`,
+  `duration_ms`); files live in `data/media/` (Docker: `/data/media`). ([ADR 0011](docs/decisions/0011-media-video-cropper.md))
+- **post_targets.options** also carries `video_id`, `title`, `privacy`, `tags` for video posts;
+  **post_metrics** also has `views` (YouTube).
 - **post_metrics**: one row per delivery with stats: `source` (`api` | `import`), `impressions`,
   `members_reached`, `reactions`, `comments`, `reshares`, `saves`, `link_clicks`, `clicks`,
   `engagements`. ([ADR 0006](docs/decisions/0006-linkedin-post-management.md))
+- **personas**: AI writing styles: `name` (unique), `tone`, `voice`, `language`, `format`, `hashtags`,
+  `emoji`, `always`, `never`, `example`. No lengths or platforms. ([ADR 0012](docs/decisions/0012-ai-generation.md))
+- **generations**: every AI generation: `source` (`idea` | `blog`), `idea`, `blog_url`, `event` (JSON),
+  `platforms` (JSON), `persona` (JSON copy), `model`, `drafts` (JSON per platform: text, length, limit,
+  over, unknown_links, title, post_id). Newest 200 kept.
+- **ai_usage**: Gemini requests per Pacific day (`day`, `requests`), for the daily budget.
 - **activity**: what happened, as one plain sentence per row (`kind`, `message`, optional
   `platform`, `post_id`, `url`). Written by the services; the newest 1000 are kept.
   Feeds *Recent activity*. ([ADR 0004](docs/decisions/0004-tabs-status-analytics.md))
@@ -254,6 +284,7 @@ social_manager/
 │   │   │   ├── posts.py       create / edit / delete / retry, state changes
 │   │   │   ├── blog.py        blog import and auto-planning
 │   │   │   ├── activity.py    activity log ("Recent activity")
+│   │   │   ├── media.py       media library: pictures and videos, streamed uploads
 │   │   │   ├── monitor.py     system snapshot for the Status tab
 │   │   │   ├── analytics.py   filtered counts for the Analytics tab
 │   │   │   ├── social.py      one account for the Social tab: upcoming, history, best posts
@@ -275,7 +306,10 @@ social_manager/
 │   │       ├── x.py           X adapter (OAuth 1.0a, POST /2/tweets)
 │   │       ├── linkedin.py    LinkedIn adapter (OAuth 2.0 token, POST /rest/posts) and sign-in helpers
 │   │       ├── devto.py       dev.to adapter (API key, POST/PUT /api/articles, stats)
-│   │       └── bluesky.py     Bluesky adapter (app password, createRecord, link cards, delete, stats)
+│   │       ├── bluesky.py     Bluesky adapter (app password, createRecord, link cards, pictures, video, delete, stats)
+│   │       ├── youtube.py     YouTube adapter (Google OAuth, resumable upload, Shorts, stats)
+│   │       ├── tiktok.py      TikTok adapter (OAuth with rotating refresh token, chunked upload)
+│   │       └── instagram.py   Instagram Reels adapter (Instagram Login, resumable upload; inactive until approved)
 │   └── tests/                 pytest suite (fake publisher, never posts)
 │
 ├── frontend/                  the UI: static files, no build step
@@ -285,10 +319,16 @@ social_manager/
 │   ├── css/app.css            design tokens, light/dark themes, responsive rules
 │   └── js/
 │       ├── main.js            entry point: load data, wire the tabs and top bar
-│       ├── tabs.js            Status / Analytics / Scheduler tabs (URL hash, keyboard)
+│       ├── tabs.js            Status / Social / Media / Analytics / Scheduler tabs (URL hash, keyboard)
+│       ├── media.js           Media tab (library) and the "From library…" picker
+│       ├── post-media.js      "Picture or video" in the post dialog
+│       ├── cropper.js         picture cropper, one crop per platform (canvas, no library)
 │       ├── status.js          Status tab: health tiles, attention list, recent activity
 │       ├── analytics.js       Analytics tab: filters, figures, platform table, post list, report links
 │       ├── social.js          Social tab: account sidebar, posts, stats, import, reports
+│       ├── ai.js              AI generation tab: form, drafts, history
+│       ├── personas.js        personas dialog (AI generation)
+│       ├── ai-api.js          backend calls for the AI generation tab
 │       ├── handoff.js         "Finish in LinkedIn": copy the text, open LinkedIn's post box
 │       ├── chart.js           small column chart + its table view (no library)
 │       ├── post-options.js    LinkedIn options in the composer (own text, image, card, …)
@@ -350,7 +390,9 @@ Interactive docs (try requests from the browser): **`/docs`** (Swagger) and
 | PUT | `/api/posts/{id}/published/{platform}` | ⚠️ Change the text of the **live** post `{text}` | 200 `Post` |
 | DELETE | `/api/posts/{id}/published/{platform}` | ⚠️ Delete the post **on the platform** (planner keeps a record) | 200 `Post` |
 | POST | `/api/media` | Upload an image (raw body, JPEG/PNG/GIF, ≤ 8 MB) | 201 `{id, mime, size, url}` |
-| GET | `/api/media/{id}` | The uploaded image | 200 image |
+| GET | `/api/media/{id}` | The picture or video file | 200 file |
+| GET | `/api/media?kind=` | The library, newest first, each with `used_by` | 200 `Media[]` |
+| DELETE | `/api/media/{id}` | Remove from the library; 409 while a scheduled post uses it | 204 |
 | GET | `/api/stats` | Per platform: are automatic stats on, and if not why | 200 |
 | POST | `/api/stats/refresh` | Fetch stats for live posts (only when automatic stats are on) | 200 `{updated, problems}` |
 | POST | `/api/stats/import` | Import LinkedIn's analytics export (raw body, .xlsx/.csv); unmatched rows become imported past posts | 200 `{rows, matched, added, skipped, unmatched, message}` |
@@ -361,6 +403,15 @@ Interactive docs (try requests from the browser): **`/docs`** (Swagger) and
 | GET | `/api/activity?limit=` | Recent activity, newest first (`limit` 1–100, default 20) | 200 `Activity[]` |
 | GET | `/api/analytics?start=&end=&platform=&source=&status=` | Counts and posts matching the filters | 200 `Analytics` |
 | GET | `/api/social/{platform}?start=&end=` | One account: upcoming posts, history and totals for the period, best posts | 200 `Social` |
+| GET | `/api/ai/status` | Gemini key set? Model, budget per minute / day, requests used today (no call to Gemini) | 200 |
+| GET, POST | `/api/ai/personas` | List / create personas | 200 / 201 |
+| PUT, DELETE | `/api/ai/personas/{id}` | Edit / delete a persona (generations keep their copy) | 200 / 204 |
+| POST | `/api/ai/personas/starters` | Add the starter personas that aren't there yet | 201 |
+| POST | `/api/ai/generate` | `{source, idea, blog_url, event, platforms, persona_id}` → one draft per platform. Sends the text to Google; posts nothing | 201 `Generation` |
+| GET | `/api/ai/generations?limit=` | History, newest first | 200 |
+| GET, DELETE | `/api/ai/generations/{id}` | One generation / remove it from the history | 200 / 204 |
+| POST | `/api/ai/generations/{id}/regenerate` | `{platform}` → a new draft for that platform | 200 |
+| PUT | `/api/ai/generations/{id}/drafts/{platform}/post` | `{post_id}`: remember the draft became a post | 200 |
 | GET | `/api/profiles?refresh=` | Signed-in account per connected platform: `{platform, profile: {name, handle, url, avatar, followers, following, posts, bio} \| null, error}`; asks the platforms, kept 10 min | 200 |
 | GET | `/api/reports/posts?format=&start=&end=&platform=&source=&status=&utc_offset=` | Download a report: `csv` or `xlsx` | 200 file |
 | GET | `/api/blog/posts` | Cached blog library, newest first | 200 `BlogPost[]` |
@@ -611,6 +662,15 @@ an image. Keep it at mode 660: the backend joins its group to write it.
 | `DEVTO_API_KEY` | Publishing blog posts to dev.to and reading their stats ([dev.to setup](#devto-setup)) |
 | `BLUESKY_HANDLE`, `BLUESKY_APP_PASSWORD` | Posting to Bluesky. Handle like `yourname.bsky.social` (a bare `yourname` works too); an app password, never the account password |
 | `BLUESKY_SERVICE` | Optional. Your Bluesky server, if it isn't `https://bsky.social` |
+| `GEMINI_API_KEY` | AI generation (Google AI Studio → Get API key) |
+| `GEMINI_MODEL` | Optional. Default `gemini-3.1-flash-lite` |
+| `GEMINI_RPM`, `GEMINI_RPD` | Optional. Your project's Gemini limits per minute / per day (defaults 15 / 500); see aistudio.google.com/rate-limit |
+| `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET` | Google OAuth client (Web application) for *Sign in with YouTube* |
+| `YOUTUBE_REFRESH_TOKEN` | Written by the sign-in |
+| `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET` | TikTok developer app for *Sign in with TikTok* |
+| `TIKTOK_REFRESH_TOKEN`, `TIKTOK_REFRESH_EXPIRES_AT`, `TIKTOK_OPEN_ID` | Written by the sign-in, and again on every refresh (TikTok replaces the token) |
+| `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET` | Instagram app (Instagram API with Instagram Login) |
+| `INSTAGRAM_ACCESS_TOKEN`, `INSTAGRAM_USER_ID`, `INSTAGRAM_TOKEN_EXPIRES_AT` | Written by the sign-in (60 days) |
 | `LINKEDIN_SCOPES` | Optional. Permissions to ask for at sign-in (default `openid profile w_member_social`); add `r_member_postAnalytics` only once LinkedIn approved it |
 | `LINKEDIN_GRANTED_SCOPES` | Written by the sign-in: what LinkedIn granted. Automatic stats turn on when it includes `r_member_postAnalytics` |
 
@@ -742,6 +802,61 @@ Good to know:
   public API without signing in.
 
 Decision record: [0009](docs/decisions/0009-bluesky.md).
+Pictures (≤ 1 MB; the cropper shrinks them) and videos (≤ 3 min, ≤ 100 MB) come from *Picture or video*
+in the post dialog ([ADR 0011](docs/decisions/0011-media-video-cropper.md)).
+
+## YouTube setup
+
+1. [Google Cloud console](https://console.cloud.google.com/): create a project, enable the
+   **YouTube Data API v3**, set up the **OAuth consent screen** (add yourself as a test user).
+2. **Credentials → Create credentials → OAuth client ID → Web application**, with the redirect URL
+   `http://localhost:8080/api/connect/youtube/callback` (local dev: port 8000).
+3. Put the client ID and secret in `env` as `YOUTUBE_CLIENT_ID` / `YOUTUBE_CLIENT_SECRET`, restart the backend.
+4. **Status** tab → YouTube card → **Sign in with YouTube** → allow.
+
+Good to know: until Google **audits** the project, every upload is **private** (make it public in
+YouTube Studio). While the consent screen is in *Testing*, Google ends the sign-in after **7 days**;
+publish the consent screen to avoid that. A vertical video of up to 3 minutes becomes a **Short**.
+The post text is the description; the title is its own field (default: the text's first line).
+
+## TikTok setup
+
+1. [TikTok for Developers](https://developers.tiktok.com/apps): create an app, add **Login Kit** and
+   **Content Posting API** (Direct Post), scopes `user.info.basic` and `video.publish`.
+2. Redirect URL: `<your app address>/api/connect/tiktok/callback`. TikTok requires **https**, so
+   `http://localhost` is likely refused: use an https tunnel to the app (and set `SM_PUBLIC_URL` to it).
+3. Put the client key and secret in `env` as `TIKTOK_CLIENT_KEY` / `TIKTOK_CLIENT_SECRET`, restart, then
+   **Sign in with TikTok** on the Status tab.
+
+Until TikTok **audits** the app, posts are visible only to you; the app picks that automatically.
+
+## Instagram setup
+
+Built but inactive. You need an Instagram **professional** (business or creator) account, a Meta app with
+the **Instagram API with Instagram Login** use case (its Instagram app ID and secret in `env` as
+`INSTAGRAM_APP_ID` / `INSTAGRAM_APP_SECRET`), Meta's **review** of `instagram_business_content_publish`,
+and an **https** redirect URL (`<address>/api/connect/instagram/callback`). Then **Sign in with Instagram**.
+Only **Reels** are posted: Instagram fetches photos from a public web address, which this app doesn't have.
+
+## AI generation
+
+1. Get a key at [Google AI Studio](https://aistudio.google.com/app/apikey) and put it in `env` as
+   `GEMINI_API_KEY`, then restart the backend. The tab shows the model and today's usage.
+2. **Manage personas → Add starter personas**, or write your own (template in the dialog).
+3. Fill in the form → **Generate drafts** → edit → **Open in post window** → Schedule or Post now.
+
+Good to know:
+
+- The model is Gemini 3.1 Flash-Lite: fast, and free on Google's free tier (on that tier Google may
+  use what you send to improve its products). Change it with `GEMINI_MODEL`.
+- Personas set the style only; each platform's limit comes from the app. Drafts over the limit are
+  sent back once to be shortened; links you didn't give are flagged.
+- Rate limits: the app stays under `GEMINI_RPM` / `GEMINI_RPD` (set them to your project's numbers),
+  waits out a short per-minute limit, and otherwise says when to try again. The daily count resets
+  at midnight Pacific time, like Google's.
+- dev.to isn't offered: it publishes the whole blog post.
+
+Decision record: [0012](docs/decisions/0012-ai-generation.md).
 
 ## Adding a platform
 
@@ -767,6 +882,27 @@ Decision record: [0009](docs/decisions/0009-bluesky.md).
 - Secrets live only in `env`. Never commit them, log them or return them from the API.
 
 ## Changelog
+
+### 2026-11-08: AI generation
+- New **AI generation** tab: Gemini 3.1 Flash-Lite writes one draft per platform from an idea or a
+  blog post, plus an optional event recap, in a persona's style. Review, edit, then open each draft
+  in the post window; nothing is posted by the AI.
+- Personas (add, edit, duplicate, delete, two starters), a history of every generation, and which
+  drafts became posts. Drafts are checked against each platform's limit; made-up links are flagged.
+- Rate limits: a per-minute and per-day budget (`GEMINI_RPM`, `GEMINI_RPD`), Google's 429 retry delay
+  honoured. New tables `personas`, `generations`, `ai_usage`; routes under `/api/ai`.
+- ADR [0012](docs/decisions/0012-ai-generation.md).
+
+### 2026-11-08: Media library, videos, picture cropper
+- **Media** tab: pictures and videos uploaded once (videos up to 1 GB, streamed to disk), with size,
+  shape, length and where each is used; *New post with this*, *Crop a copy…*, download, delete.
+- **Picture cropper**: one crop per platform in its best shape, compressed to the platform's limit.
+- **Picture or video** in the post dialog, for every ticked platform that takes it, with warnings
+  when a video won't fit. Bluesky now posts pictures and videos; LinkedIn posts videos.
+- **YouTube** (Shorts and videos), **TikTok** and **Instagram Reels** adapters, signed in from the
+  Status tab. YouTube and TikTok posts stay private until those platforms audit the app; Instagram is
+  inactive until Meta's review. Video trimming was declined (no ffmpeg).
+  ADR [0011](docs/decisions/0011-media-video-cropper.md).
 
 ### 2026-11-08: Post now, account profiles
 - **Post now** next to Schedule: sends to the ticked platforms straight away after a confirmation,

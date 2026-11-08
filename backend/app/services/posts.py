@@ -41,12 +41,16 @@ PAST_GRACE = timedelta(minutes=2)
 DEFAULT_OPTIONS: dict[str, Any] = {
     "visibility": "PUBLIC",        # PUBLIC | CONNECTIONS
     "allow_reshare": True,
-    "attachment": "none",          # none | image | link_card
+    "attachment": "none",          # none | image | link_card | video
     "image_id": None,
     "image_alt": "",
     "first_comment": "",
     "draft": False,                # save as a draft on the platform (dev.to) instead of publishing
     "handoff": False,              # the platform's own scheduler posts it (LinkedIn); the app doesn't send it
+    "video_id": None,              # a video from the media library (attachment "video")
+    "title": "",                   # video title (YouTube); empty = the text's first line
+    "privacy": "",                 # video platforms: public | unlisted | private | friends ("" = platform default)
+    "tags": "",                    # video tags, comma-separated (YouTube)
 }
 # Which feature each non-default option needs, and the words for the error message.
 OPTION_NEEDS = {
@@ -58,7 +62,7 @@ OPTION_NEEDS = {
 }
 # Shared by the SQL below: is this delivery handed to the platform's own scheduler?
 HANDOFF_SQL = "COALESCE(json_extract(options, '$.handoff'), 0)"
-ATTACHMENTS = {"image": "attach an image", "link_card": "show a link preview"}
+ATTACHMENTS = {"image": "attach an image", "link_card": "show a link preview", "video": "post a video"}
 
 
 def validate_content(body: str, platforms: list[str]) -> None:
@@ -181,12 +185,22 @@ class PostService:
                     raise InvalidInput(f"{info.name} can't {ATTACHMENTS.get(kind, 'add that')} from the app.")
                 if kind == "image" and not self.image_exists(opts["image_id"]):
                     raise InvalidInput("The attached image isn't available any more. Attach it again.")
+                if kind == "video" and not self.image_exists(opts["video_id"], "video"):
+                    raise InvalidInput("The attached video isn't in the media library any more. Attach it again.")
                 if kind == "link_card" and not (blog_url or URL_RE.search(text_for(pid, body, variants))):
                     raise InvalidInput(f"A link preview needs a link in the {info.name} text, or a blog post.")
+            if info.title_limit and len(opts["title"]) > info.title_limit:
+                raise InvalidInput(f"{info.name} titles can be up to {info.title_limit} characters; "
+                                   f"this one is {len(opts['title'])}.")
             if opts["handoff"] and (kind != "none" or opts["first_comment"]):
                 raise InvalidInput(f"{info.name}'s own scheduler only gets the text from this app. "
                                    f"Add images, link previews and a first comment in {info.name} instead.")
             out[pid] = opts
+        # Video platforms only post videos: say so now rather than when the post is due.
+        for pid in platforms:
+            info = PLATFORMS[pid]
+            if "video_only" in info.features and out.get(pid, {}).get("attachment") != "video":
+                raise InvalidInput(f"{info.name} only posts videos. Attach a video, or untick {info.name}.")
         return out
 
     @staticmethod

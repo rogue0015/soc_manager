@@ -108,7 +108,7 @@ def test_upload_attach_and_publish_an_image(li_app, c, fake_li):
 
 def test_only_real_images_are_accepted(c):
     r = c.post("/api/media", content=b"<script>alert(1)</script>", headers={"Content-Type": "image/png"})
-    assert r.status_code == 422 and r.json()["detail"] == "Only JPEG, PNG and GIF images can be attached."
+    assert r.status_code == 422 and r.json()["detail"] == "Only JPEG, PNG and GIF pictures and MP4 or MOV videos can be added."
     assert c.get("/api/media/../../env").status_code == 404
     assert c.get("/api/media/" + "a" * 32).status_code == 404
 
@@ -213,6 +213,7 @@ def test_stats_status_says_why_automatic_stats_are_off(c):
          "reason": "This platform doesn't share post statistics with the app."},
         {"platform": "devto", "connected": False, "automatic": False, "reason": "dev.to isn't connected."},
         {"platform": "bluesky", "connected": False, "automatic": False, "reason": "Bluesky isn't connected."},
+        {"platform": "youtube", "connected": False, "automatic": False, "reason": "YouTube isn't connected."},
     ]
     assert c.post("/api/stats/refresh").status_code == 422
 

@@ -21,7 +21,8 @@ from ..services.errors import InvalidInput, NotFound
 from ..timeutil import now_utc
 
 router = APIRouter(prefix="/api")
-MAX_UPLOAD = 8 * 1024 * 1024   # images and analytics files; nginx allows a little more
+MAX_UPLOAD = 8 * 1024 * 1024   # analytics files; nginx allows a little more
+MAX_VIDEO_BYTES = 1024 * 1024 * 1024   # media library uploads (services/media.py checks per kind)
 
 
 # ---- health & platforms ---------------------------------------------------
@@ -215,9 +216,34 @@ async def _read_body(request: Request, limit: int) -> bytes:
 
 
 @router.post("/media", status_code=201)
-async def upload_media(request: Request):
-    """Store an image sent as the raw request body (Content-Type: image/...)."""
-    return request.app.state.media.save(await _read_body(request, MAX_UPLOAD))
+async def upload_media(request: Request, name: str = ""):
+    """Add a picture or video to the library, sent as the raw request body. It is streamed to a
+    temporary file (videos can be up to 1 GB), then checked and kept by the media service."""
+    media = request.app.state.media
+    tmp = media.temp_path()
+    size = 0
+    try:
+        with open(tmp, "wb") as f:
+            async for chunk in request.stream():
+                size += len(chunk)
+                if size > MAX_VIDEO_BYTES:
+                    raise InvalidInput("That file is larger than 1 GB.")
+                f.write(chunk)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+    return media.store(tmp, name)
+
+
+@router.get("/media")
+def list_media(request: Request, kind: Literal["image", "video"] | None = None):
+    """The media library, newest first, with the posts that use each item."""
+    return request.app.state.media.list(kind)
+
+
+@router.delete("/media/{media_id}", status_code=204)
+def delete_media(media_id: str, request: Request):
+    request.app.state.media.delete(media_id)
 
 
 @router.get("/media/{media_id}")

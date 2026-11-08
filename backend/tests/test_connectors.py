@@ -82,7 +82,7 @@ def test_sign_in_button_appears_once_the_app_keys_are_in():
 
 
 def test_platforms_without_an_adapter_are_planned():
-    for pid in ("facebook", "instagram", "threads", "mastodon"):
+    for pid in ("facebook", "threads", "mastodon"):
         c = card(pid, {})
         assert c["state"] == "planned" and not c["built"] and c["next_step"].startswith("Not built yet")
 

@@ -71,7 +71,15 @@ class Attachments:
         opts = target.get("options") or {}
         image, card, warning = None, None, None
         kind = opts.get("attachment", "none")
-        if kind == "image":
+        video = None
+        if kind == "video":
+            if self.media is None:
+                raise AttachmentError("Videos can't be attached here.")
+            try:
+                video = self.media.load_video(opts.get("video_id"), opts.get("image_alt", ""))
+            except NotFound as exc:
+                raise AttachmentError(str(exc)) from exc
+        elif kind == "image":
             if self.media is None:
                 raise AttachmentError("Images can't be attached here.")
             try:
@@ -93,6 +101,10 @@ class Attachments:
             first_comment=(opts.get("first_comment") or "").strip(),
             article=self.article_for(target),
             draft=bool(opts.get("draft")),
+            video=video,
+            title=(opts.get("title") or "").strip(),
+            privacy=opts.get("privacy") or "",
+            tags=tuple(t.strip() for t in (opts.get("tags") or "").split(",") if t.strip()),
         )
         return extras, warning
 
