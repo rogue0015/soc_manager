@@ -21,6 +21,38 @@ class PublishError(Exception):
 class PublishResult:
     external_id: str
     external_url: str | None = None
+    warning: str | None = None   # it went out, but an extra step (e.g. the first comment) didn't
+
+
+@dataclass(frozen=True)
+class ImageFile:
+    data: bytes
+    mime: str                    # image/jpeg | image/png | image/gif
+    alt: str = ""
+
+
+@dataclass(frozen=True)
+class LinkCard:
+    """A link shown as a preview card: title, summary and thumbnail."""
+    url: str
+    title: str
+    description: str = ""
+    thumbnail: ImageFile | None = None
+
+
+@dataclass(frozen=True)
+class PostExtras:
+    """Everything that goes with the text. Platforms use what they support (see PlatformInfo.features)."""
+    visibility: str = "PUBLIC"   # PUBLIC | CONNECTIONS
+    allow_reshare: bool = True
+    image: ImageFile | None = None
+    link_card: LinkCard | None = None
+    first_comment: str = ""
+
+
+# Post metrics a platform can report. Keys match the post_metrics table.
+METRICS = ("impressions", "members_reached", "reactions", "comments", "reshares",
+           "saves", "link_clicks", "clicks", "engagements")
 
 
 @dataclass(frozen=True)
@@ -33,10 +65,49 @@ class AccountStatus:
 
 class Publisher(ABC):
     @abstractmethod
-    def publish(self, text: str) -> PublishResult: ...
+    def publish(self, text: str, extras: PostExtras | None = None) -> PublishResult: ...
 
     @abstractmethod
     def check(self) -> AccountStatus: ...
+
+    # Optional actions on posts that are already live. Only platforms whose
+    # PlatformInfo.features lists them override these.
+
+    def delete(self, external_id: str) -> None:
+        raise PublishError("This platform can't delete posts from the app.")
+
+    def edit(self, external_id: str, text: str) -> None:
+        raise PublishError("This platform can't edit published posts from the app.")
+
+    stats_off_reason = "This platform doesn't share post statistics with the app."
+
+    def stats_enabled(self) -> bool:
+        return False
+
+    def metrics(self, external_id: str) -> dict[str, int]:
+        raise PublishError("This platform doesn't share post statistics with the app.")
+
+
+@dataclass(frozen=True)
+class Credential:
+    key: str     # variable name in the env file
+    label: str   # what the platform's developer portal calls it
+
+
+@dataclass(frozen=True)
+class Connector:
+    """How a platform gets connected, for the connector cards on the Status tab.
+
+    Holds env key *names* only, never values (see connectors.py).
+    """
+    auth: str                               # how it signs in, in plain words
+    portal_url: str | None = None           # where the keys come from
+    credentials: tuple[Credential, ...] = ()
+    sign_in: str | None = None              # extra step when keys alone can't post (LinkedIn)
+    token_key: str | None = None            # env key that sign-in writes
+    expires_key: str | None = None          # env key with that token's expiry (UTC ISO)
+    built: bool = False                     # an adapter exists and can post
+    note: str = ""                          # what to know before connecting
 
 
 @dataclass(frozen=True)
@@ -47,6 +118,9 @@ class PlatformInfo:
     text_color: str      # readable text on top of `color`
     char_limit: int
     url_weight: int | None = None  # platforms that shorten links count each URL as this many chars
+    # What the app can do on this platform beyond posting text:
+    # edit, delete, image, link_card, first_comment, visibility, stats
+    features: tuple[str, ...] = ()
 
     def text_length(self, text: str) -> int:
         if self.url_weight is None:

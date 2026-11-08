@@ -6,14 +6,19 @@ be planned for those platforms; they fail with a clear message when due.
 
 from __future__ import annotations
 
-from .base import AccountStatus, PlatformInfo, PublishError, PublishResult, Publisher
+from . import linkedin
+from .base import (
+    METRICS, AccountStatus, ImageFile, LinkCard, PlatformInfo, PostExtras, PublishError, PublishResult, Publisher,
+)
+from .linkedin import LinkedInPublisher
 from .x import XPublisher
 
 PLATFORMS: dict[str, PlatformInfo] = {
     p.id: p
     for p in [
         PlatformInfo("x", "X (Twitter)", "#1d9bf0", "#ffffff", 280, url_weight=23),
-        PlatformInfo("linkedin", "LinkedIn", "#0f766e", "#ffffff", 3000),
+        PlatformInfo("linkedin", "LinkedIn", "#0f766e", "#ffffff", 3000,
+                     features=("edit", "delete", "image", "link_card", "first_comment", "visibility", "stats")),
         PlatformInfo("facebook", "Facebook", "#4338ca", "#ffffff", 63206),
         PlatformInfo("instagram", "Instagram", "#db2777", "#ffffff", 2200),
         PlatformInfo("threads", "Threads", "#525252", "#ffffff", 500),
@@ -23,17 +28,27 @@ PLATFORMS: dict[str, PlatformInfo] = {
 }
 
 
+ADAPTERS: dict[str, type[Publisher]] = {"x": XPublisher, "linkedin": LinkedInPublisher}
+
+# Platforms you sign in to from the app (browser OAuth). Each module provides
+# sign_in_url(secrets, redirect_uri, state) and finish_sign_in(secrets, code, redirect_uri).
+SIGN_IN = {"linkedin": linkedin}
+
+
+def build_publisher(platform: str, secrets: dict[str, str]) -> Publisher | None:
+    """The adapter for one platform, or None while its credentials are missing."""
+    try:
+        return ADAPTERS[platform](secrets)
+    except ValueError:
+        return None
+
+
 def build_publishers(secrets: dict[str, str]) -> dict[str, Publisher]:
     """Create adapters for every platform whose credentials are present."""
-    publishers: dict[str, Publisher] = {}
-    try:
-        publishers["x"] = XPublisher(secrets)
-    except ValueError:
-        pass  # X credentials not configured; X shows as "not connected".
-    return publishers
+    return {pid: pub for pid in ADAPTERS if (pub := build_publisher(pid, secrets))}
 
 
 __all__ = [
-    "PLATFORMS", "build_publishers", "AccountStatus", "PlatformInfo",
-    "PublishError", "PublishResult", "Publisher",
+    "PLATFORMS", "SIGN_IN", "build_publisher", "build_publishers", "AccountStatus", "PlatformInfo",
+    "PublishError", "PublishResult", "Publisher", "PostExtras", "ImageFile", "LinkCard", "METRICS",
 ]

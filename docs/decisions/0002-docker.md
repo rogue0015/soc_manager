@@ -1,6 +1,6 @@
 # 0002: Run in Docker as separate frontend and backend containers
 
-- **Status:** Accepted
+- **Status:** Accepted; amended by [0005](0005-sign-in-from-the-app.md) (`env` is now mounted into the backend, not passed as variables)
 - **Date:** 2026-11-07
 - **Amends:** [0001](0001-architecture.md) ("the backend serves the files directly" now applies to local dev only)
 

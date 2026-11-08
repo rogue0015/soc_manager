@@ -7,21 +7,48 @@ from fastapi.testclient import TestClient
 
 from backend.app.config import PROJECT_ROOT, Settings
 from backend.app.main import create_app
-from backend.app.platforms import AccountStatus, PublishError, PublishResult, Publisher
+from backend.app.platforms import AccountStatus, PostExtras, PublishError, PublishResult, Publisher
 
 
 class FakePublisher(Publisher):
-    """Records posts instead of sending them. Set `fail_with` to simulate an error."""
+    """Records posts instead of sending them. Set `fail_with` to simulate an error,
+    `warning` to simulate a post that went out with a problem, `stats` to report statistics."""
 
     def __init__(self):
         self.sent: list[str] = []
+        self.extras: list[PostExtras | None] = []
+        self.deleted: list[str] = []
+        self.edited: list[tuple[str, str]] = []
         self.fail_with: str | None = None
+        self.warning: str | None = None
+        self.stats: dict[str, int] | None = None
 
-    def publish(self, text: str) -> PublishResult:
+    def publish(self, text: str, extras: PostExtras | None = None) -> PublishResult:
         if self.fail_with:
             raise PublishError(self.fail_with)
         self.sent.append(text)
-        return PublishResult(external_id=str(len(self.sent)), external_url=f"https://x.test/{len(self.sent)}")
+        self.extras.append(extras)
+        n = len(self.sent)
+        return PublishResult(external_id=f"urn:li:share:70000000000000000{n:02d}",
+                             external_url=f"https://x.test/{n}", warning=self.warning)
+
+    def delete(self, external_id: str) -> None:
+        if self.fail_with:
+            raise PublishError(self.fail_with)
+        self.deleted.append(external_id)
+
+    def edit(self, external_id: str, text: str) -> None:
+        if self.fail_with:
+            raise PublishError(self.fail_with)
+        self.edited.append((external_id, text))
+
+    def stats_enabled(self) -> bool:
+        return self.stats is not None
+
+    def metrics(self, external_id: str) -> dict[str, int]:
+        if self.fail_with:
+            raise PublishError(self.fail_with)
+        return dict(self.stats or {})
 
     def check(self) -> AccountStatus:
         return AccountStatus(True, True, "@tester", "ok")

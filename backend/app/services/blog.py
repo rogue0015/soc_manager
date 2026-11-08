@@ -21,6 +21,7 @@ import requests
 from ..db import Database
 from ..platforms import PLATFORMS
 from ..timeutil import now_iso
+from .activity import platform_names, plural
 from .errors import InvalidInput
 from .posts import PostService, validate_content, validate_time
 
@@ -141,6 +142,7 @@ class BlogService:
                     (p["url"], p["title"], p["description"], p["published_on"],
                      json.dumps(p["tags"]), p["image"], fetched_at),
                 )
+        self.posts.activity.record("blog_synced", f"Imported {plural(len(found), 'post')} from the blog.")
         return self.list()
 
     def list(self) -> list[dict[str, Any]]:
@@ -156,6 +158,21 @@ class BlogService:
             d["tags"] = json.loads(d["tags"])
             out.append(d)
         return out
+
+    @staticmethod
+    def _own_texts(post: dict[str, Any], platforms: list[str], shared: str) -> dict[str, str]:
+        """Give roomier platforms (LinkedIn) the full summary when a stricter one (X) shortened it."""
+        own = {}
+        for pid in platforms:
+            text = compose_text(post, [pid])
+            if text != shared:
+                own[pid] = text
+        return own
+
+    @staticmethod
+    def _default_options(platforms: list[str]) -> dict[str, dict[str, Any]]:
+        """Blog links go out as preview cards where the platform can show one."""
+        return {pid: {"attachment": "link_card"} for pid in platforms if "link_card" in PLATFORMS[pid].features}
 
     def plan(self, urls: list[str], start: datetime, every_days: int, platforms: list[str]) -> list[dict[str, Any]]:
         """Schedule one post per blog URL: the first at `start`, then every `every_days` days."""
@@ -174,4 +191,13 @@ class BlogService:
             text = compose_text(cache[url], platforms)
             validate_content(text, platforms)
             drafts.append((text, start + timedelta(days=i * every_days), url))
-        return [self.posts.create(text, when, platforms, blog_url=url) for text, when, url in drafts]
+        created = [self.posts.create(text, when, platforms, blog_url=url, log=False,
+                                     variants=self._own_texts(cache[url], platforms, text),
+                                     options=self._default_options(platforms))
+                   for text, when, url in drafts]
+        every = "day" if every_days == 1 else f"{every_days} days"
+        self.posts.activity.record(
+            "blog_planned",
+            f"Planned {plural(len(created), 'blog post')} for {platform_names(platforms)}, one every {every}.",
+        )
+        return created

@@ -10,10 +10,22 @@ from __future__ import annotations
 import requests
 from requests_oauthlib import OAuth1
 
-from .base import AccountStatus, PublishError, PublishResult, Publisher
+from .base import AccountStatus, Connector, Credential, PostExtras, PublishError, PublishResult, Publisher
 
 API = "https://api.x.com"
-REQUIRED_KEYS = ("X_API_KEY", "X_API_SECRET", "X_ACCESS_TOKEN", "X_ACCESS_TOKEN_SECRET")
+CONNECTOR = Connector(
+    auth="API keys (OAuth 1.0a), with “Read and write” permission",
+    portal_url="https://developer.x.com/en/portal/dashboard",
+    credentials=(
+        Credential("X_API_KEY", "API key"),
+        Credential("X_API_SECRET", "API key secret"),
+        Credential("X_ACCESS_TOKEN", "Access token"),
+        Credential("X_ACCESS_TOKEN_SECRET", "Access token secret"),
+    ),
+    built=True,
+    note="Keys are under your app → Keys and tokens. The app must be attached to a Project to post.",
+)
+REQUIRED_KEYS = tuple(c.key for c in CONNECTOR.credentials)
 TIMEOUT = 20
 
 
@@ -41,7 +53,8 @@ class XPublisher(Publisher):
             secrets["X_ACCESS_TOKEN_SECRET"],
         )
 
-    def publish(self, text: str) -> PublishResult:
+    def publish(self, text: str, extras: PostExtras | None = None) -> PublishResult:
+        # Text only for now: images on X need its media upload API (planned).
         try:
             resp = requests.post(f"{API}/2/tweets", json={"text": text}, auth=self._auth, timeout=TIMEOUT)
         except requests.RequestException as exc:

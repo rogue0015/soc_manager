@@ -34,17 +34,50 @@ async function request(method, path, data) {
   return body;
 }
 
+async function upload(path, file) {
+  let resp;
+  try {
+    resp = await fetch(path, {
+      method: 'POST', body: file, headers: { 'Content-Type': file.type || 'application/octet-stream' },
+    });
+  } catch {
+    throw new ApiError('Can’t reach the server. Is it running?', 0);
+  }
+  const body = await resp.json().catch(() => null);
+  if (resp.status === 413) throw new ApiError('That file is too large.', 413);
+  if (!resp.ok) throw new ApiError(detailFrom(body, resp.status), resp.status);
+  return body;
+}
+
 export const api = {
   platforms: () => request('GET', '/api/platforms'),
   platformStatus: (id) => request('GET', `/api/platforms/${id}/status`),
   testPost: (id, text) => request('POST', `/api/platforms/${id}/test`, { text }),
 
+  getPost: (id) => request('GET', `/api/posts/${id}`),
   posts: (start, end) =>
     request('GET', `/api/posts?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`),
   createPost: (post) => request('POST', '/api/posts', post),
   updatePost: (id, post) => request('PUT', `/api/posts/${id}`, post),
   deletePost: (id) => request('DELETE', `/api/posts/${id}`),
   retryPost: (id) => request('POST', `/api/posts/${id}/retry`),
+  editLive: (id, platform, text) => request('PUT', `/api/posts/${id}/published/${platform}`, { text }),
+  deleteLive: (id, platform) => request('DELETE', `/api/posts/${id}/published/${platform}`),
+
+  /** Images and analytics files go up as the raw request body. */
+  uploadMedia: (file) => upload('/api/media', file),
+  statsStatus: () => request('GET', '/api/stats'),
+  refreshStats: () => request('POST', '/api/stats/refresh'),
+  importStats: (file) => upload('/api/stats/import', file),
+
+  connectors: () => request('GET', '/api/connectors'),
+  system: () => request('GET', '/api/system'),
+  activity: (limit = 20) => request('GET', `/api/activity?limit=${limit}`),
+  /** filters: {start, end, platform, source, status}; empty values are left out. */
+  analytics: (filters) => {
+    const query = new URLSearchParams(Object.entries(filters).filter(([, v]) => v));
+    return request('GET', `/api/analytics?${query}`);
+  },
 
   blogPosts: () => request('GET', '/api/blog/posts'),
   syncBlog: () => request('POST', '/api/blog/sync'),

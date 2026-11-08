@@ -21,10 +21,11 @@ function chip(post, target) {
   const p = state.byId[target.platform] ?? { name: target.platform, color: '#888', text_color: '#fff' };
   const when = fmt.time(new Date(post.scheduled_at));
   const firstLine = post.body.split('\n')[0];
-  const label = `${p.name}, ${when}, ${target.status}: ${firstLine}`;
+  const status = target.removed_at ? 'deleted' : target.status;
+  const label = `${p.name}, ${when}, ${status}: ${firstLine}`;
   return h('button', {
     type: 'button',
-    class: `chip ${target.status}`,
+    class: `chip ${target.status}${target.removed_at ? ' removed' : ''}`,
     style: { background: p.color, color: p.text_color },
     title: target.error ? `${label}\nError: ${target.error}` : label,
     'aria-label': label,

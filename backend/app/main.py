@@ -22,10 +22,19 @@ from .config import Settings
 from .db import Database
 from .platforms import Publisher, build_publishers
 from .routes.api import router
+from .services.activity import ActivityLog
+from .services.analytics import AnalyticsService
+from .services.attachments import Attachments
 from .services.blog import BlogService
 from .services.errors import Conflict, InvalidInput, NotFound
+from .services.live import LiveService
+from .services.media import MediaService
+from .services.monitor import MonitorService
 from .services.posts import PostService
-from .services.scheduler import run_scheduler
+from .services.scheduler import SchedulerState, run_scheduler
+from .services.signin import SignInService
+from .services.stats_import import StatsImport
+from .timeutil import now_utc
 
 log = logging.getLogger(__name__)
 
@@ -35,18 +44,24 @@ def create_app(settings: Settings | None = None, publishers: dict[str, Publisher
     settings = settings or Settings.from_environment()
     db = Database(settings.db_path)
     db.init()
-    posts = PostService(db)
+    activity = ActivityLog(db)
+    media = MediaService(db, settings.media_dir)
+    posts = PostService(db, activity, image_exists=media.exists)
+    attachments = Attachments(db, media)
     publishers = build_publishers(settings.secrets) if publishers is None else publishers
+    scheduler = SchedulerState(settings.scheduler_enabled, settings.scheduler_interval_seconds)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         stop = asyncio.Event()
         task = None
+        activity.record("started", "Backend started." if settings.scheduler_enabled
+                        else "Backend started with the scheduler off.")
         if settings.scheduler_enabled:
             if n := posts.recover_interrupted():
                 log.warning("%s post(s) were interrupted mid-publish and marked failed", n)
             task = asyncio.create_task(
-                run_scheduler(posts, publishers, settings.scheduler_interval_seconds, stop)
+                run_scheduler(posts, publishers, settings.scheduler_interval_seconds, stop, scheduler, attachments)
             )
         yield
         stop.set()
@@ -57,7 +72,15 @@ def create_app(settings: Settings | None = None, publishers: dict[str, Publisher
     app.state.settings = settings
     app.state.publishers = publishers
     app.state.posts = posts
+    app.state.activity = activity
     app.state.blog = BlogService(db, posts, settings.blog_base_url)
+    app.state.analytics = AnalyticsService(db)
+    app.state.monitor = MonitorService(db, settings, scheduler, publishers, started_at=now_utc())
+    app.state.signin = SignInService(settings, publishers, activity)
+    app.state.media = media
+    app.state.attachments = attachments
+    app.state.live = LiveService(posts, publishers, activity)
+    app.state.stats_import = StatsImport(posts)
 
     # Map domain errors to HTTP in one place. The UI shows `detail` to the user.
     for exc_type, status in ((NotFound, 404), (Conflict, 409), (InvalidInput, 422)):

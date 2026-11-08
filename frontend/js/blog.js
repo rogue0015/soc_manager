@@ -23,7 +23,7 @@ export function renderBlog() {
   const unscheduled = state.blog.filter((b) => !b.scheduled_count).length;
   const synced = state.blog[0]?.fetched_at;
   $('blog-meta').textContent = total
-    ? `${total} posts, ${unscheduled} not yet scheduled. Synced ${fmt.shortDate(new Date(synced))}.`
+    ? `${fmt.count(total, 'post')}, ${unscheduled} not yet scheduled. Synced ${fmt.shortDate(new Date(synced))}.`
     : 'No posts yet. Press Sync to import from rogue0015.github.io/blogs.';
 
   $('blog-list').replaceChildren(...visible.map((b) => h('li', { class: 'blog-item' },

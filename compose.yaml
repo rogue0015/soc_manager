@@ -2,7 +2,7 @@
 #
 #   browser ──▶ frontend (nginx, UI + /api proxy) ──▶ backend (FastAPI + scheduler + SQLite)
 #
-#   cp .env.example env      # then fill in your keys
+#   cp .env.example env && chmod 660 env   # then fill in your keys
 #   docker compose up --build -d
 #   open http://127.0.0.1:8080
 #
@@ -13,12 +13,23 @@ services:
   backend:
     build: ./backend
     image: social-manager-backend
-    # Platform keys (X_API_KEY, ...) are read at runtime, never baked into the image.
-    env_file:
-      - path: ./env
-        required: false
+    # Platform keys are read from the env file at runtime, never baked into the image.
+    # The file is mounted (not passed as variables) so "Sign in with LinkedIn" can
+    # save the new token into it. The backend joins the file's group to write it,
+    # so keep it private to you: chmod 660 env. See docs/decisions/0005-sign-in-from-the-app.md.
     volumes:
       - sm-data:/data
+      - type: bind
+        source: ./env
+        target: /config/env
+        bind:
+          create_host_path: false   # fail clearly if env is missing: cp .env.example env
+    group_add:
+      - "${SM_ENV_GID:-1000}"       # the env file's group id (stat -c %g env)
+    environment:
+      SM_ENV_FILE: /config/env
+      # Sign-in redirects return here. Register <this>/api/connect/linkedin/callback with LinkedIn.
+      SM_PUBLIC_URL: "http://localhost:${SM_PORT:-8080}"
     restart: unless-stopped
     # No `ports:` on purpose: the API is reachable only through the frontend.
 

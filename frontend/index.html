@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Social Manager</title>
-  <meta name="description" content="Plan and schedule posts across social platforms from one calendar.">
+  <meta name="description" content="Plan, schedule and track posts across social platforms: status, analytics and a content calendar.">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='4' fill='%233451d1'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="css/app.css">
   <script type="module" src="js/main.js"></script>
@@ -15,58 +15,182 @@
       <span class="brand-mark" aria-hidden="true"></span>
       <span>Social Manager</span>
     </div>
-    <nav class="month-nav" aria-label="Month">
-      <button class="icon-btn" id="prev-month" aria-label="Previous month">‹</button>
-      <h1 id="month-label" aria-live="polite">Month</h1>
-      <button class="icon-btn" id="next-month" aria-label="Next month">›</button>
-      <button class="btn btn-ghost" id="today-btn">Today</button>
+    <nav class="tabs" role="tablist" aria-label="Sections">
+      <button class="tab" type="button" role="tab" id="tab-status" aria-controls="panel-status" data-tab="status">Status</button>
+      <button class="tab" type="button" role="tab" id="tab-analytics" aria-controls="panel-analytics" data-tab="analytics">Analytics</button>
+      <button class="tab" type="button" role="tab" id="tab-scheduler" aria-controls="panel-scheduler" data-tab="scheduler">Scheduler</button>
     </nav>
     <button class="btn btn-primary" id="new-post-btn">+ New post</button>
   </header>
 
-  <main class="layout">
-    <section class="calendar-panel" aria-label="Content calendar">
-      <ul class="legend" id="legend" aria-label="Platform colours"></ul>
-      <div class="weekdays" aria-hidden="true">
-        <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+  <main>
+    <!-- Status: sign-in status of each app, system health, recent activity -->
+    <section class="panel" id="panel-status" role="tabpanel" aria-labelledby="tab-status" hidden>
+      <div class="panel-head">
+        <h1>Status</h1>
+        <span class="muted small" id="system-updated" aria-live="polite"></span>
+        <button class="btn btn-ghost btn-sm" type="button" id="system-refresh">Refresh</button>
       </div>
-      <div class="grid" id="calendar-grid"></div>
-      <p class="hint">Click a day to schedule a post. Click a coloured entry to edit it.</p>
+      <ul class="attention" id="system-attention" aria-live="polite"></ul>
+      <div class="tiles" id="system-tiles"></div>
+
+      <section class="connectors-section" aria-labelledby="connectors-title">
+        <div class="section-head">
+          <h2 id="connectors-title">Connectors</h2>
+          <span class="muted small" id="connector-summary" aria-live="polite"></span>
+        </div>
+        <p class="form-error" id="signin-error" role="alert"></p>
+        <div id="connector-list"></div>
+      </section>
+
+      <div class="status-grid">
+        <section class="card" id="test-post" aria-label="Test post">
+          <details class="test-post">
+            <summary>Send a test post</summary>
+            <form id="test-post-form">
+              <label class="field"><span>Post to</span><select id="test-post-platform"></select></label>
+              <label for="test-post-text" class="sr-only">Test message</label>
+              <textarea id="test-post-text" rows="5"></textarea>
+              <div class="row between">
+                <span class="counter" id="test-post-counter"></span>
+                <button class="btn btn-primary" type="submit" id="test-post-send">Post now</button>
+              </div>
+              <p class="result" id="test-post-result" role="status"></p>
+            </form>
+          </details>
+        </section>
+
+        <section class="card" aria-labelledby="activity-title">
+          <h2 id="activity-title">Recent activity</h2>
+          <ol class="activity-list" id="activity-list"></ol>
+        </section>
+      </div>
     </section>
 
-    <aside class="sidebar">
-      <section class="card" id="connections" aria-labelledby="connections-title">
-        <h2 id="connections-title">Connections</h2>
-        <div id="connection-list"></div>
+    <!-- Analytics: what was published and how it went, with one row of filters -->
+    <section class="panel" id="panel-analytics" role="tabpanel" aria-labelledby="tab-analytics" hidden>
+      <div class="panel-head">
+        <h1>Analytics</h1>
+      </div>
+      <form class="filters" id="analytics-filters" aria-label="Filters">
+        <label class="field"><span>Period</span>
+          <select id="f-range">
+            <option value="7">Last 7 days</option>
+            <option value="30" selected>Last 30 days</option>
+            <option value="90">Last 90 days</option>
+            <option value="all">All time</option>
+          </select>
+        </label>
+        <label class="field"><span>Platform</span><select id="f-platform"><option value="">All platforms</option></select></label>
+        <label class="field"><span>Source</span>
+          <select id="f-source">
+            <option value="">All posts</option>
+            <option value="custom">Written by me</option>
+            <option value="blog">From my blog</option>
+          </select>
+        </label>
+        <label class="field"><span>Status</span>
+          <select id="f-status">
+            <option value="">Any status</option>
+            <option value="published">Published</option>
+            <option value="failed">Failed</option>
+            <option value="scheduled">Waiting to go out</option>
+          </select>
+        </label>
+      </form>
+      <p class="muted small note">
+        Publishing figures come from this app. Impressions, reactions and comments come from
+        your LinkedIn analytics file (see “LinkedIn post stats” below); X doesn’t share them yet.
+      </p>
 
-        <details class="test-post" id="test-post">
-          <summary>Send a test post to X</summary>
-          <form id="test-post-form">
-            <label for="test-post-text" class="sr-only">Test message</label>
-            <textarea id="test-post-text" rows="5"></textarea>
+      <div class="analytics-body" id="analytics-body">
+        <p class="form-error" id="analytics-error" role="alert"></p>
+        <div class="tiles" id="kpi-tiles"></div>
+
+        <section class="card" aria-labelledby="stats-title">
+          <div class="section-head">
+            <h2 id="stats-title">LinkedIn post stats</h2>
+            <span class="muted small" id="stats-auto"></span>
+          </div>
+          <p class="muted small">
+            LinkedIn only shares per-post numbers with approved company apps, so import them: on
+            <a href="https://www.linkedin.com/analytics/creator/content/" target="_blank" rel="noopener">LinkedIn analytics</a>
+            press <strong>Export</strong>, then choose that file here. Numbers appear on each post below.
+          </p>
+          <div class="row wrap">
+            <label class="btn btn-ghost btn-sm file-btn">Import analytics file…
+              <input type="file" id="stats-file" accept=".xlsx,.csv"></label>
+            <button class="btn btn-ghost btn-sm" type="button" id="stats-refresh" hidden>Refresh from LinkedIn</button>
+          </div>
+          <p class="result" id="stats-result" role="status"></p>
+          <div class="tiles" id="stat-tiles"></div>
+        </section>
+
+        <section class="card" aria-labelledby="timeline-title">
+          <h2 id="timeline-title">Published over time</h2>
+          <p class="muted small" id="timeline-subtitle"></p>
+          <div class="chart" id="timeline-chart"></div>
+          <details class="table-view">
+            <summary>Show as a table</summary>
+            <div id="timeline-table"></div>
+          </details>
+        </section>
+
+        <div class="analytics-grid">
+          <section class="card" aria-labelledby="by-platform-title">
+            <h2 id="by-platform-title">By platform</h2>
+            <div id="by-platform"></div>
+          </section>
+          <section class="card" aria-labelledby="reasons-title">
+            <h2 id="reasons-title">Why posts failed</h2>
+            <div id="failure-reasons"></div>
+          </section>
+        </div>
+
+        <section class="card" aria-labelledby="post-list-title">
+          <h2 id="post-list-title">Posts</h2>
+          <p class="muted small">Click a post to open it. Published LinkedIn posts can be edited or deleted there.</p>
+          <ul class="post-list" id="post-list"></ul>
+          <button class="btn btn-ghost btn-sm" type="button" id="post-list-more" hidden>Show more</button>
+        </section>
+      </div>
+    </section>
+
+    <!-- Scheduler: the content calendar and the blog library -->
+    <section class="panel" id="panel-scheduler" role="tabpanel" aria-labelledby="tab-scheduler" hidden>
+      <div class="layout">
+        <section class="calendar-panel" aria-label="Content calendar">
+          <nav class="month-nav" aria-label="Month">
+            <button class="icon-btn" id="prev-month" aria-label="Previous month">‹</button>
+            <h1 id="month-label" aria-live="polite">Month</h1>
+            <button class="icon-btn" id="next-month" aria-label="Next month">›</button>
+            <button class="btn btn-ghost" id="today-btn">Today</button>
+          </nav>
+          <ul class="legend" id="legend" aria-label="Platform colours"></ul>
+          <div class="weekdays" aria-hidden="true">
+            <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+          </div>
+          <div class="grid" id="calendar-grid"></div>
+          <p class="hint">Click a day to schedule a post. Click a coloured entry to edit it. Use ← → to change month.</p>
+        </section>
+
+        <aside class="sidebar">
+          <section class="card" id="blog" aria-labelledby="blog-title">
             <div class="row between">
-              <span class="counter" id="test-post-counter"></span>
-              <button class="btn btn-primary" type="submit" id="test-post-send">Post to X now</button>
+              <h2 id="blog-title">From my blog</h2>
+              <button class="btn btn-ghost btn-sm" id="blog-sync">Sync</button>
             </div>
-            <p class="result" id="test-post-result" role="status"></p>
-          </form>
-        </details>
-      </section>
-
-      <section class="card" id="blog" aria-labelledby="blog-title">
-        <div class="row between">
-          <h2 id="blog-title">From my blog</h2>
-          <button class="btn btn-ghost btn-sm" id="blog-sync">Sync</button>
-        </div>
-        <p class="muted small" id="blog-meta">Loading…</p>
-        <label class="check small"><input type="checkbox" id="blog-unscheduled-only" checked> Only show posts not yet scheduled</label>
-        <ul class="blog-list" id="blog-list"></ul>
-        <div class="row between sticky-actions">
-          <button class="btn btn-ghost btn-sm" id="blog-select-all">Select all</button>
-          <button class="btn btn-primary btn-sm" id="blog-plan-btn" disabled>Plan selected</button>
-        </div>
-      </section>
-    </aside>
+            <p class="muted small" id="blog-meta">Loading…</p>
+            <label class="check small"><input type="checkbox" id="blog-unscheduled-only" checked> Only show posts not yet scheduled</label>
+            <ul class="blog-list" id="blog-list"></ul>
+            <div class="row between sticky-actions">
+              <button class="btn btn-ghost btn-sm" id="blog-select-all">Select all</button>
+              <button class="btn btn-primary btn-sm" id="blog-plan-btn" disabled>Plan selected</button>
+            </div>
+          </section>
+        </aside>
+      </div>
+    </section>
   </main>
 
   <!-- Compose / edit a post -->
@@ -99,6 +223,46 @@
         <fieldset class="field">
           <legend>Platforms</legend>
           <div class="platform-picks" id="platform-picks"></div>
+        </fieldset>
+
+        <!-- Shown when LinkedIn is chosen (js/post-options.js) -->
+        <fieldset class="field platform-options" id="li-options" hidden>
+          <legend><span class="swatch" id="li-swatch" aria-hidden="true"></span> LinkedIn options</legend>
+          <label class="field" id="li-text-field" hidden>
+            <span>LinkedIn version <span class="muted">(optional; the other platforms get the text above)</span></span>
+            <textarea id="li-text" rows="4" placeholder="Leave empty to post the same text on LinkedIn"></textarea>
+          </label>
+          <div class="field">
+            <span id="li-attach-label">Attach</span>
+            <div class="segmented" role="radiogroup" aria-labelledby="li-attach-label">
+              <label><input type="radio" name="li-attach" value="none" checked> Nothing</label>
+              <label><input type="radio" name="li-attach" value="image"> Image</label>
+              <label><input type="radio" name="li-attach" value="link_card"> Link preview</label>
+            </div>
+          </div>
+          <div class="image-pick" id="li-image-box" hidden>
+            <div class="row">
+              <label class="btn btn-ghost btn-sm file-btn">Choose image…
+                <input type="file" id="li-image-file" accept="image/png,image/jpeg,image/gif"></label>
+              <span class="muted small" id="li-image-status">JPEG, PNG or GIF, up to 8 MB</span>
+            </div>
+            <img id="li-image-preview" alt="" hidden>
+            <label class="field"><span>Describe the image <span class="muted">(read aloud by screen readers)</span></span>
+              <input type="text" id="li-image-alt" maxlength="300"></label>
+          </div>
+          <p class="muted small" id="li-card-note" hidden>LinkedIn shows the link as a card with the page’s title, summary and picture.</p>
+          <div class="row two">
+            <label class="field"><span>Who can see it</span>
+              <select id="li-visibility">
+                <option value="PUBLIC">Anyone</option>
+                <option value="CONNECTIONS">Connections only</option>
+              </select>
+            </label>
+            <label class="check li-reshare"><input type="checkbox" id="li-reshare" checked> Allow reposts</label>
+          </div>
+          <label class="field"><span>First comment <span class="muted">(optional; posted right after the post)</span></span>
+            <textarea id="li-comment" rows="2" maxlength="1250" placeholder="e.g. the link to your blog post"></textarea>
+          </label>
         </fieldset>
 
         <div class="row two">

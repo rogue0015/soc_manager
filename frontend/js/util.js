@@ -37,6 +37,32 @@ export const fmt = {
   day: (d) => d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' }),
   shortDate: (d) => d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }),
   time: (d) => d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }),
+  dayMonth: (d) => d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' }),
+  dateTime: (d) => `${fmt.shortDate(d)}, ${fmt.time(d)}`,
+  /** "just now", "5 min ago", "in 2 h", "3 days ago". */
+  ago(d, now = new Date()) {
+    const s = Math.round((now - d) / 1000);
+    const a = Math.abs(s);
+    if (a < 45) return 'just now';
+    const [n, unit] = a < 3600 ? [Math.round(a / 60), 'min'] : a < 86400 ? [Math.round(a / 3600), 'h']
+      : [Math.round(a / 86400), Math.round(a / 86400) === 1 ? 'day' : 'days'];
+    return s >= 0 ? `${n} ${unit} ago` : `in ${n} ${unit}`;
+  },
+  /** Uptime-style length: "45 s", "12 min", "3 h 5 min", "2 days 4 h". */
+  duration(seconds) {
+    const m = Math.floor(seconds / 60), hrs = Math.floor(m / 60), days = Math.floor(hrs / 24);
+    if (seconds < 60) return `${seconds} s`;
+    if (m < 60) return `${m} min`;
+    if (hrs < 24) return `${hrs} h ${m % 60} min`;
+    return `${days} ${days === 1 ? 'day' : 'days'} ${hrs % 24} h`;
+  },
+  bytes: (n) => (n < 1024 ? `${n} B` : n < 1048576 ? `${Math.round(n / 1024)} KB` : `${(n / 1048576).toFixed(1)} MB`),
+  num: (n) => n.toLocaleString(),
+  /** "1 post", "3 posts". */
+  count: (n, word) => `${n.toLocaleString()} ${word}${n === 1 ? '' : 's'}`,
+  /** "Wed, 28 Oct, 12:54" without the year, for lists. */
+  when: (d) => `${d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}, ${fmt.time(d)}`,
+  percent: (r) => (r == null ? '—' : `${Math.round(r * 100)}%`),
 };
 
 /** A sensible default time for a new post on `day`: 09:00, or the next full hour if that has passed. */
@@ -69,6 +95,9 @@ export function composeBlogText(post, platforms) {
   }
   return `${title}\n\n${url}`;
 }
+
+/** Tell every view that posts changed (saved, deleted, edited or deleted on a platform). */
+export const announcePostsChanged = () => window.dispatchEvent(new Event('sm:posts-changed'));
 
 // ---- toast ---------------------------------------------------------------
 
