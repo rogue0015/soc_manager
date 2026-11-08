@@ -25,7 +25,8 @@ import requests
 
 from ..timeutil import now_utc, to_utc_iso
 from .base import (
-    URL_RE, AccountStatus, Connector, Credential, ImageFile, PostExtras, PublishError, PublishResult, Publisher,
+    URL_RE, AccountProfile, AccountStatus, Connector, Credential, ImageFile, PostExtras, PublishError, PublishResult,
+    Publisher,
 )
 
 API = "https://api.linkedin.com"
@@ -396,6 +397,20 @@ class LinkedInPublisher(Publisher):
             return (f"{detail}. LinkedIn retired API version {API_VERSION}: "
                     "set API_VERSION in backend/app/platforms/linkedin.py to a recent month.")
         return detail
+
+    def profile(self) -> AccountProfile:
+        """Name and picture from OpenID userinfo. LinkedIn shares no handle or follower numbers with
+        this sign-in; linkedin.com/in/me/ opens your own profile when you're signed in there."""
+        self._ready()
+        try:
+            resp = self._userinfo()
+        except requests.RequestException as exc:
+            raise PublishError(_unreachable(exc)) from exc
+        if not resp.ok:
+            raise PublishError(self._userinfo_problem(resp))
+        self._member = me = resp.json()
+        return AccountProfile(name=me.get("name") or "LinkedIn member", url="https://www.linkedin.com/in/me/",
+                              avatar=me.get("picture"))
 
     def check(self) -> AccountStatus:
         """Confirm the token works and say how long it stays valid. Posts nothing."""

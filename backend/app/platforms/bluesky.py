@@ -18,7 +18,9 @@ from typing import Any
 
 import requests
 
-from .base import AccountStatus, Connector, Credential, PostExtras, PublishError, PublishResult, Publisher
+from .base import (
+    AccountProfile, AccountStatus, Connector, Credential, PostExtras, PublishError, PublishResult, Publisher,
+)
 
 SERVICE = "https://bsky.social"            # sign-in and writes, for accounts hosted by Bluesky
 PUBLIC = "https://public.api.bsky.app"     # public reads: profiles and post counts
@@ -148,6 +150,18 @@ class BlueskyPublisher(Publisher):
         except PublishError as exc:
             return AccountStatus(False, False, None, str(exc))
         return AccountStatus(True, True, f"@{session.get('handle', self._handle)}", "Connected. Posting is available.")
+
+    def profile(self) -> AccountProfile:
+        """The public profile, read without signing in."""
+        resp = self._call("get", f"{PUBLIC}/xrpc/app.bsky.actor.getProfile", params={"actor": self._handle})
+        if not resp.ok:
+            raise PublishError(_explain(resp))
+        p = resp.json()
+        handle = p.get("handle", self._handle)
+        return AccountProfile(name=p.get("displayName") or handle, handle=f"@{handle}",
+                              url=f"https://bsky.app/profile/{handle}", avatar=p.get("avatar"),
+                              followers=p.get("followersCount"), following=p.get("followsCount"),
+                              posts=p.get("postsCount"), bio=p.get("description") or "")
 
     def stats_enabled(self) -> bool:
         return True

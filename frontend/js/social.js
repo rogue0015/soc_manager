@@ -1,7 +1,9 @@
-// Social tab: one account at a time, picked in the sidebar. For it: what's coming up
-// (including posts waiting in LinkedIn's own scheduler), past posts with their numbers,
-// the best posts, importing or refreshing stats, and downloadable reports.
-// Loads when the tab is shown and when posts change; it doesn't poll. See ADR 0008.
+// Social tab: one account at a time, picked in the sidebar, which shows who you're signed in
+// as on each platform. For the chosen account: its profile, what's coming up (including posts
+// waiting in LinkedIn's own scheduler), past posts with their numbers, the best posts,
+// importing or refreshing stats, and downloadable reports. Loads when the tab is shown and
+// when posts change; it doesn't poll. Profiles come in after the rest, because they ask the
+// platforms. See ADR 0008 and 0010.
 
 import { api } from './api.js';
 import { tile } from './analytics.js';
@@ -20,6 +22,8 @@ const STATE_TONES = { connected: 'ok', needs_keys: 'warn', needs_sign_in: 'warn'
 let selected = null;
 let connectors = [];
 let statsStatus = [];
+let profiles = {};        // platform id -> {profile, error} for connected platforms
+let profilesLoading = false;
 let last = null;          // the latest overview from the API
 let shownHistory = PAGE;
 let requestNo = 0;
@@ -33,15 +37,31 @@ function periodRange() {
 
 // ---- sidebar ----------------------------------------------------------------------
 
+const swatch = (p) => h('span', { class: 'swatch', style: { background: p.color }, 'aria-hidden': 'true' });
+
+/** The account's picture, ringed in the platform's colour; the colour swatch if there's no picture. */
+function accountMark(p, prof, cls) {
+  if (!prof?.avatar) return cls === 'nav-avatar' ? swatch(p) : h('span', { class: `${cls} placeholder`, style: { background: p.color }, 'aria-hidden': 'true' });
+  return h('img', {
+    class: cls, src: prof.avatar, alt: '', referrerpolicy: 'no-referrer', loading: 'lazy',
+    style: { '--ring': p.color },
+    onerror: (e) => e.target.replaceWith(swatch(p)),   // e.g. an expired picture link
+  });
+}
+
 function renderNav() {
   $('social-nav-list').replaceChildren(...state.platforms.map((p) => {
     const c = connectors.find((x) => x.platform === p.id);
+    const prof = profiles[p.id]?.profile;
     return h('li', {}, h('button', {
       type: 'button', class: 'social-nav-item', 'aria-current': p.id === selected ? 'true' : null,
+      title: prof ? `${p.name}: ${prof.handle ?? prof.name}` : p.name,
       onclick: () => select(p.id),
     },
-    h('span', { class: 'swatch', style: { background: p.color }, 'aria-hidden': 'true' }),
-    h('span', { class: 'name' }, p.name),
+    accountMark(p, prof, 'nav-avatar'),
+    h('span', { class: 'nav-text' },
+      h('span', { class: 'name' }, p.name),
+      prof ? h('span', { class: 'nav-account' }, prof.handle ?? prof.name) : null),
     c ? h('span', { class: `nav-state ${STATE_TONES[c.state] ?? ''}` }, STATE_WORDS[c.state] ?? c.state) : null));
   }));
 }
@@ -52,6 +72,66 @@ function select(id) {
   shownHistory = PAGE;
   renderNav();
   load();
+}
+
+// ---- the signed-in account ---------------------------------------------------------------
+
+function count(n, word) {
+  return h('span', {}, h('strong', {}, fmt.num(n)), ` ${word}`);
+}
+
+function renderProfile() {
+  const box = $('social-profile');
+  const p = platform();
+  const c = connectors.find((x) => x.platform === selected);
+  const entry = profiles[selected];
+  const toStatus = h('a', { href: '#status' }, 'Status tab');
+  if (!entry || !entry.profile) {
+    let message;
+    if (c?.state === 'planned') message = [`${p.name} isn’t built yet. You can still plan posts for it.`];
+    else if (c?.state !== 'connected') message = [`You’re not signed in to ${p.name} yet. The `, toStatus, ' says how to connect it.'];
+    else if (!entry) message = [profilesLoading ? `Loading your ${p.name} profile…` : ''];
+    else message = [entry.error, ' See the ', toStatus, '.'];
+    box.replaceChildren(h('p', { class: 'muted small' }, ...message));
+    return;
+  }
+  const prof = entry.profile;
+  const counts = [
+    prof.followers != null ? count(prof.followers, prof.followers === 1 ? 'follower' : 'followers') : null,
+    prof.following != null ? count(prof.following, 'following') : null,
+    prof.posts != null ? count(prof.posts, p.features.includes('article')
+      ? (prof.posts === 1 ? 'article' : 'articles') : (prof.posts === 1 ? 'post' : 'posts')) : null,
+  ].filter(Boolean);
+  box.replaceChildren(
+    accountMark(p, prof, 'profile-avatar'),
+    h('div', { class: 'profile-main' },
+      h('div', { class: 'profile-name' }, prof.name, prof.handle && prof.handle !== prof.name
+        ? h('span', { class: 'muted' }, ` ${prof.handle}`) : null),
+      prof.bio ? h('p', { class: 'profile-bio' }, prof.bio) : null,
+      counts.length ? h('p', { class: 'profile-counts' }, counts)
+        : h('p', { class: 'muted small' }, `${p.name} doesn’t share follower numbers with the app.`)),
+    h('div', { class: 'profile-actions' },
+      prof.url ? h('a', { class: 'btn btn-ghost btn-sm', href: prof.url, target: '_blank', rel: 'noopener' },
+        'View profile', h('span', { 'aria-hidden': 'true' }, ' ↗')) : null,
+      h('button', { class: 'btn btn-ghost btn-sm', type: 'button', onclick: (e) => loadProfiles(true, e.currentTarget) },
+        'Refresh')));
+}
+
+async function loadProfiles(refresh = false, button = null) {
+  profilesLoading = true;
+  if (button) button.disabled = true;
+  renderProfile();
+  try {
+    profiles = Object.fromEntries((await api.profiles(refresh)).map((e) => [e.platform, e]));
+    if (refresh) toast('Profiles updated');
+  } catch (e) {
+    $('social-error').textContent = e.message;
+  } finally {
+    profilesLoading = false;
+    if (button) button.disabled = false;
+  }
+  renderNav();
+  renderProfile();
 }
 
 // ---- one post in a list ---------------------------------------------------------
@@ -241,6 +321,7 @@ async function loadData() {
 
 async function load() {
   renderHead();
+  renderProfile();
   renderImport();
   renderReports();
   await loadData();
@@ -253,6 +334,7 @@ async function onShowSocial() {
     $('social-error').textContent = e.message;
   }
   renderNav();
+  loadProfiles();   // asks the platforms, so it fills in after the rest
   await load();
 }
 

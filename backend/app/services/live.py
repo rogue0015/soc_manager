@@ -1,9 +1,11 @@
-"""Changes to posts that are already live on a platform: edit, delete, fetch statistics.
+"""Posting right away, and changes to posts that are already live: edit, delete, fetch statistics.
 
-These act on the platform itself (LinkedIn), so every action checks that the
-post really went out, wasn't deleted since, and that the platform supports it
-(PlatformInfo.features). The planner keeps its record either way: a deleted
-post is marked removed_at, an edited one gets its new text and edited_at.
+"Post now" sends a planned post's waiting platforms in the request itself, through
+the same claim-and-send path as the scheduler (services/scheduler.py), so each
+delivery still goes out at most once. Edit and delete act on the platform itself,
+so they check that the post really went out, wasn't deleted since, and that the
+platform supports it (PlatformInfo.features). The planner keeps its record either
+way: a deleted post is marked removed_at, an edited one gets its new text and edited_at.
 """
 
 from __future__ import annotations
@@ -13,15 +15,35 @@ from typing import Any
 
 from ..platforms import PLATFORMS, PublishError, Publisher
 from .activity import ActivityLog, snippet
+from .attachments import Attachments
 from .errors import Conflict, InvalidInput, NotFound
 from .posts import PostService, validate_content
+from .scheduler import send_targets
 
 
 class LiveService:
-    def __init__(self, posts: PostService, publishers: dict[str, Publisher], activity: ActivityLog):
+    def __init__(self, posts: PostService, publishers: dict[str, Publisher], activity: ActivityLog,
+                 attachments: Attachments | None = None):
         self.posts = posts
         self.publishers = publishers   # the shared dict: a sign-in can replace an adapter
         self.activity = activity
+        self.attachments = attachments
+
+    def post_now(self, post_id: int) -> dict[str, Any]:
+        """Send a planned post's waiting platforms right away instead of at its time. Public at once."""
+        post = self.posts.get(post_id)
+        handoff = [t["platform"] for t in post["targets"]
+                   if t["status"] == "scheduled" and (t["options"] or {}).get("handoff")]
+        if handoff:
+            name = PLATFORMS[handoff[0]].name
+            raise InvalidInput(f"{name}'s own scheduler is chosen for this post. "
+                               f"Pick “This app” in the {name} options to post it now.")
+        claimed = self.posts.claim_post(post_id)
+        if not claimed:
+            raise Conflict("Nothing is waiting to go out for this post. "
+                           "Platforms that failed can be sent again with Retry failed.")
+        send_targets(self.posts, self.publishers, self.attachments, claimed)
+        return self.posts.get(post_id)
 
     def _live(self, post_id: int, platform: str, feature: str, verb: str) -> tuple[dict, dict, Publisher]:
         info = PLATFORMS.get(platform)

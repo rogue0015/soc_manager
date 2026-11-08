@@ -99,6 +99,7 @@
             <button class="btn btn-primary" type="button" id="social-new">+ New post</button>
           </div>
           <p class="form-error" id="social-error" role="alert"></p>
+          <section class="card social-profile" id="social-profile" aria-label="Signed-in account" aria-live="polite"></section>
 
           <div class="social-grid" id="social-body">
             <section class="card" aria-labelledby="social-upcoming-title">
@@ -381,8 +382,11 @@
         <button class="btn btn-danger" type="button" id="post-delete" hidden>Delete</button>
         <button class="btn btn-ghost" type="button" id="post-retry" hidden>Retry failed</button>
         <span class="spacer"></span>
-        <button class="btn btn-ghost" type="button" data-close>Cancel</button>
-        <button class="btn btn-primary" type="submit" id="post-save">Schedule</button>
+        <span class="foot-actions">
+          <button class="btn btn-ghost" type="button" data-close>Cancel</button>
+          <button class="btn btn-ghost" type="button" id="post-now">Post now</button>
+          <button class="btn btn-primary" type="submit" id="post-save">Schedule</button>
+        </span>
       </footer>
     </form>
   </dialog>

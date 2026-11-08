@@ -20,7 +20,8 @@ _Last updated: 2026-11-08_
 | Area | Status | Notes |
 |---|---|---|
 | Tabs: Status · Social · Analytics · Scheduler | ✅ Done | Links work (`#status`, `#social`, `#analytics`, `#scheduler`); the last tab is remembered. |
-| Social tab | ✅ Done | Sidebar of accounts; for each: coming up, stats and best posts, past posts, import / refresh stats, reports. |
+| Social tab | ✅ Done | Sidebar of your signed-in accounts (picture, handle); for each: a profile card with followers / following / posts where shared, coming up, stats and best posts, past posts, import / refresh stats, reports. |
+| Post now | ✅ Done | **Post now** in the post window sends to the ticked platforms straight away (asks first) and shows each platform's result. |
 | LinkedIn's own scheduler | ✅ Done (one step in LinkedIn) | *Who posts it: LinkedIn's scheduler*: the app copies the text and opens LinkedIn, you set the time there; it goes out even with this computer off. LinkedIn's API can't schedule posts itself. |
 | Past LinkedIn stats | ✅ By import | LinkedIn's analytics export adds past posts (not sent by this app) with their numbers. |
 | Downloadable reports | ✅ Done | Excel (summary + every post) or CSV, per account on the Social tab or for any Analytics view. |
@@ -98,7 +99,7 @@ databases (`./data/` and the `sm-data` volume).
 ### Tests and checks
 
 ```bash
-.venv/bin/python -m pytest                              # 177 tests, never posts anything
+.venv/bin/python -m pytest                              # 187 tests, never posts anything
 .venv/bin/python test_credentials/test_x_credentials.py # check X keys without posting
 ```
 
@@ -110,7 +111,9 @@ Four tabs at the top: **Status** (is everything working?), **Social** (one accou
 time), **Analytics** (how did posts do?) and **Scheduler** (plan and schedule).
 **+ New post** works from any tab.
 
-- **Social:** pick an account in the sidebar (on phones: the row of buttons at the top).
+- **Social:** pick an account in the sidebar (on phones: the row of buttons at the top). Signed-in
+  accounts show their picture and handle; the selected one gets a profile card (followers,
+  following, posts where the platform shares them, **View profile**, **Refresh**).
   *Coming up* lists what's still to go out, *Stats* and *Best posts* cover the chosen period,
   *Past posts* lists what went out (including imported ones). **Open** shows a post,
   **View on …** opens it on the platform. *Import and refresh stats* and *Reports* are below.
@@ -127,6 +130,9 @@ time), **Analytics** (how did posts do?) and **Scheduler** (plan and schedule).
 - **Analytics:** pick a period, platform, source and status in the filter row; every
   number, the chart, the platform table and the post list follow it. Hover the chart,
   or focus it and use `←` / `→`, to read each day; *Show as a table* lists them all.
+- **Post now:** write the post, tick platforms → **Post now** → confirm. It goes out straight away;
+  if a platform fails, the post stays open showing why, with **Retry failed**. Also works on a
+  scheduled post: open it → **Post now**.
 - **Schedule a post:** click a day → write text (or pick *From my blog*) →
   tick platforms → set the time → **Schedule**.
 - **Schedule on LinkedIn itself:** in *LinkedIn options* choose *Who posts it: LinkedIn's
@@ -201,7 +207,8 @@ Decisions and their reasons: [docs/decisions/](docs/decisions/)
 [0006: LinkedIn post management](docs/decisions/0006-linkedin-post-management.md),
 [0007: dev.to articles](docs/decisions/0007-devto-articles.md),
 [0008: Social tab, LinkedIn's scheduler, reports](docs/decisions/0008-social-tab-handoff-reports.md),
-[0009: Bluesky](docs/decisions/0009-bluesky.md)).
+[0009: Bluesky](docs/decisions/0009-bluesky.md),
+[0010: Post now, account profiles](docs/decisions/0010-post-now-and-profiles.md)).
 
 ### Data model
 
@@ -250,6 +257,7 @@ social_manager/
 │   │   │   ├── monitor.py     system snapshot for the Status tab
 │   │   │   ├── analytics.py   filtered counts for the Analytics tab
 │   │   │   ├── social.py      one account for the Social tab: upcoming, history, best posts
+│   │   │   ├── profiles.py    who you're signed in as on each platform (kept 10 minutes)
 │   │   │   ├── reports.py     downloadable reports (CSV, Excel with a summary sheet)
 │   │   │   ├── xlsx.py        small .xlsx writer (standard library only)
 │   │   │   ├── signin.py      "Sign in with …" from the app (OAuth redirect and callback)
@@ -338,6 +346,7 @@ Interactive docs (try requests from the browser): **`/docs`** (Swagger) and
 | PUT | `/api/posts/{id}` | Edit a post (only if nothing is published yet) | 200 `Post` |
 | DELETE | `/api/posts/{id}` | Remove from the planner | 204 |
 | POST | `/api/posts/{id}/retry` | Re-queue the platforms that failed | 200 `Post` |
+| POST | `/api/posts/{id}/publish` | ⚠️ **Post now**: send the waiting platforms **publicly, right now**; 409 if nothing is waiting, 422 for a LinkedIn hand-off | 200 `Post` |
 | PUT | `/api/posts/{id}/published/{platform}` | ⚠️ Change the text of the **live** post `{text}` | 200 `Post` |
 | DELETE | `/api/posts/{id}/published/{platform}` | ⚠️ Delete the post **on the platform** (planner keeps a record) | 200 `Post` |
 | POST | `/api/media` | Upload an image (raw body, JPEG/PNG/GIF, ≤ 8 MB) | 201 `{id, mime, size, url}` |
@@ -352,6 +361,7 @@ Interactive docs (try requests from the browser): **`/docs`** (Swagger) and
 | GET | `/api/activity?limit=` | Recent activity, newest first (`limit` 1–100, default 20) | 200 `Activity[]` |
 | GET | `/api/analytics?start=&end=&platform=&source=&status=` | Counts and posts matching the filters | 200 `Analytics` |
 | GET | `/api/social/{platform}?start=&end=` | One account: upcoming posts, history and totals for the period, best posts | 200 `Social` |
+| GET | `/api/profiles?refresh=` | Signed-in account per connected platform: `{platform, profile: {name, handle, url, avatar, followers, following, posts, bio} \| null, error}`; asks the platforms, kept 10 min | 200 |
 | GET | `/api/reports/posts?format=&start=&end=&platform=&source=&status=&utc_offset=` | Download a report: `csv` or `xlsx` | 200 file |
 | GET | `/api/blog/posts` | Cached blog library, newest first | 200 `BlogPost[]` |
 | POST | `/api/blog/sync` | Re-import from the blog | 200 `BlogPost[]` |
@@ -757,6 +767,13 @@ Decision record: [0009](docs/decisions/0009-bluesky.md).
 - Secrets live only in `env`. Never commit them, log them or return them from the API.
 
 ## Changelog
+
+### 2026-11-08: Post now, account profiles
+- **Post now** next to Schedule: sends to the ticked platforms straight away after a confirmation,
+  through the scheduler's own claim-and-send path, so nothing goes out twice. New `POST /api/posts/{id}/publish`.
+- Social tab sidebar shows your signed-in accounts (picture, handle) and a profile card per account
+  (followers, following, posts where shared). New `GET /api/profiles`.
+- ADR [0010](docs/decisions/0010-post-now-and-profiles.md). 187 backend tests.
 
 ### 2026-11-08: Bluesky, website stats link
 - **Bluesky** connected: posts with clickable links and hashtags, a link

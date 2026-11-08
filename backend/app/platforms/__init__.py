@@ -8,8 +8,8 @@ from __future__ import annotations
 
 from . import linkedin
 from .base import (
-    METRICS, AccountStatus, Article, ImageFile, LinkCard, PlatformInfo, PostExtras, PublishError, PublishResult,
-    Publisher,
+    METRICS, AccountProfile, AccountStatus, Article, ImageFile, LinkCard, PlatformInfo, PostExtras, PublishError,
+    PublishResult, Publisher,
 )
 from .bluesky import BlueskyPublisher
 from .devto import DevtoPublisher
@@ -60,6 +60,6 @@ def build_publishers(secrets: dict[str, str]) -> dict[str, Publisher]:
 
 
 __all__ = [
-    "PLATFORMS", "SIGN_IN", "build_publisher", "build_publishers", "AccountStatus", "PlatformInfo",
+    "PLATFORMS", "SIGN_IN", "build_publisher", "build_publishers", "AccountProfile", "AccountStatus", "PlatformInfo",
     "PublishError", "PublishResult", "Publisher", "PostExtras", "ImageFile", "LinkCard", "Article", "METRICS",
 ]

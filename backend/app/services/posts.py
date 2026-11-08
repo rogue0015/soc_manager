@@ -287,14 +287,36 @@ class PostService:
                 """,
                 (now_iso(),),
             ).fetchall()
-            claimed = []
-            for r in rows:
-                post = conn.execute("SELECT body, blog_url FROM posts WHERE id=?", (r["post_id"],)).fetchone()
-                claimed.append({
-                    "id": r["id"], "post_id": r["post_id"], "platform": r["platform"],
-                    "body": r["body_override"] or post["body"], "blog_url": post["blog_url"],
-                    "options": json.loads(r["options"] or "{}"),
-                })
+            return self._claimed(conn, rows)
+
+    def claim_post(self, post_id: int) -> list[dict[str, Any]]:
+        """Post now: move one post's time to now and claim its waiting deliveries, the same atomic
+        way as claim_due, so the scheduler and "Post now" can never both send a delivery."""
+        now = now_iso()
+        with self.db.connect() as conn:
+            conn.execute("UPDATE posts SET scheduled_at=?, updated_at=? WHERE id=? AND scheduled_at > ?",
+                         (now, now, post_id, now))
+            rows = conn.execute(
+                f"""
+                UPDATE post_targets SET status='publishing'
+                WHERE post_id=? AND status='scheduled' AND {HANDOFF_SQL} = 0
+                RETURNING id, post_id, platform, body_override, options
+                """,
+                (post_id,),
+            ).fetchall()
+            return self._claimed(conn, rows)
+
+    @staticmethod
+    def _claimed(conn, rows) -> list[dict[str, Any]]:
+        """Claimed deliveries with the text, link and options each should be published with."""
+        claimed = []
+        for r in rows:
+            post = conn.execute("SELECT body, blog_url FROM posts WHERE id=?", (r["post_id"],)).fetchone()
+            claimed.append({
+                "id": r["id"], "post_id": r["post_id"], "platform": r["platform"],
+                "body": r["body_override"] or post["body"], "blog_url": post["blog_url"],
+                "options": json.loads(r["options"] or "{}"),
+            })
         return claimed
 
     def settle_handoffs(self) -> int:

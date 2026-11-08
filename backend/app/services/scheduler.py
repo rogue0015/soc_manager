@@ -32,10 +32,17 @@ class SchedulerState:
 def publish_due(posts: PostService, publishers: dict[str, Publisher],
                 attachments: Attachments | None = None) -> int:
     """Send every due target once, with its image / link card / options. Returns how many were attempted."""
-    attachments = attachments or Attachments(posts.db, media=None)
     posts.settle_handoffs()   # posted by the platform's own scheduler; nothing to send
     due = posts.claim_due()
-    for target in due:
+    send_targets(posts, publishers, attachments, due)
+    return len(due)
+
+
+def send_targets(posts: PostService, publishers: dict[str, Publisher], attachments: Attachments | None,
+                 claimed: list[dict]) -> None:
+    """Publish claimed targets (from claim_due, or claim_post for "Post now") and record each outcome."""
+    attachments = attachments or Attachments(posts.db, media=None)
+    for target in claimed:
         platform = target["platform"]
         publisher = publishers.get(platform)
         if publisher is None:
@@ -55,7 +62,6 @@ def publish_due(posts: PostService, publishers: dict[str, Publisher],
             note = " ".join(w for w in (warning, result.warning) if w) or None
             posts.mark_published(target["id"], result.external_id, result.external_url, note)
             log.info("Published post %s to %s", target["post_id"], platform)
-    return len(due)
 
 
 async def run_scheduler(posts: PostService, publishers: dict[str, Publisher],

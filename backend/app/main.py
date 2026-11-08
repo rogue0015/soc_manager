@@ -32,6 +32,7 @@ from .services.live import LiveService
 from .services.media import MediaService
 from .services.monitor import MonitorService
 from .services.posts import PostService
+from .services.profiles import ProfileService
 from .services.reports import ReportService
 from .services.scheduler import SchedulerState, run_scheduler
 from .services.signin import SignInService
@@ -80,13 +81,14 @@ def create_app(settings: Settings | None = None, publishers: dict[str, Publisher
     app.state.blog = BlogService(db, posts, settings.blog_base_url)
     app.state.analytics = AnalyticsService(db)
     app.state.social = SocialService(db, app.state.analytics)
+    app.state.profiles = ProfileService(publishers)
     app.state.reports = ReportService(app.state.analytics)
     app.state.monitor = MonitorService(db, settings, scheduler, publishers, started_at=now_utc())
     app.state.signin = SignInService(settings, publishers, activity)
     app.state.media = media
     app.state.attachments = attachments
     app.state.articles = articles
-    app.state.live = LiveService(posts, publishers, activity)
+    app.state.live = LiveService(posts, publishers, activity, attachments)
     app.state.stats_import = StatsImport(posts)
 
     # Map domain errors to HTTP in one place. The UI shows `detail` to the user.

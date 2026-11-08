@@ -22,7 +22,9 @@ from typing import Any
 
 import requests
 
-from .base import AccountStatus, Connector, Credential, PostExtras, PublishError, PublishResult, Publisher
+from .base import (
+    AccountProfile, AccountStatus, Connector, Credential, PostExtras, PublishError, PublishResult, Publisher,
+)
 
 API = "https://dev.to/api"
 CONNECTOR = Connector(
@@ -160,6 +162,17 @@ class DevtoPublisher(Publisher):
         user = resp.json().get("username")
         return AccountStatus(True, True, f"@{user}" if user else None,
                              "Connected. Blog posts can be published as articles.")
+
+    def profile(self) -> AccountProfile:
+        """Name, picture and bio, plus how many articles are published. dev.to's API has no follower count."""
+        resp = self._call("get", "/users/me")
+        if not resp.ok:
+            raise PublishError(_explain(resp))
+        u = resp.json()
+        username = u.get("username", "")
+        published = sum(1 for a in self._my_articles() if a.get("published"))
+        return AccountProfile(name=u.get("name") or username, handle=f"@{username}", url=f"https://dev.to/{username}",
+                              avatar=u.get("profile_image"), posts=published, bio=u.get("summary") or "")
 
     def stats_enabled(self) -> bool:
         return True

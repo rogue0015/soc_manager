@@ -117,6 +117,12 @@ def analytics(request: Request, start: AwareDatetime | None = None, end: AwareDa
     return request.app.state.analytics.report(start, end, platform, source, status)
 
 
+@router.get("/profiles")
+def account_profiles(request: Request, refresh: bool = False):
+    """Who you're signed in as on each connected platform. Asks the platforms (kept for 10 minutes)."""
+    return request.app.state.profiles.all(refresh)
+
+
 @router.get("/social/{platform}")
 def social_overview(platform: str, request: Request, start: AwareDatetime | None = None,
                     end: AwareDatetime | None = None):
@@ -168,6 +174,12 @@ def update_post(post_id: int, data: PostIn, request: Request):
 @router.delete("/posts/{post_id}", status_code=204)
 def delete_post(post_id: int, request: Request):
     request.app.state.posts.delete(post_id)
+
+
+@router.post("/posts/{post_id}/publish")
+def post_now(post_id: int, request: Request):
+    """Send the post's waiting platforms right now instead of at its time. Public, can't be unsent."""
+    return request.app.state.live.post_now(post_id)
 
 
 @router.post("/posts/{post_id}/retry")

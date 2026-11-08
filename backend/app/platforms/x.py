@@ -10,7 +10,9 @@ from __future__ import annotations
 import requests
 from requests_oauthlib import OAuth1
 
-from .base import AccountStatus, Connector, Credential, PostExtras, PublishError, PublishResult, Publisher
+from .base import (
+    AccountProfile, AccountStatus, Connector, Credential, PostExtras, PublishError, PublishResult, Publisher,
+)
 
 API = "https://api.x.com"
 CONNECTOR = Connector(
@@ -63,6 +65,22 @@ class XPublisher(Publisher):
             raise PublishError(_explain(resp))
         tweet_id = resp.json()["data"]["id"]
         return PublishResult(external_id=tweet_id, external_url=f"https://x.com/i/web/status/{tweet_id}")
+
+    def profile(self) -> AccountProfile:
+        """Name, handle, picture and counts from v1.1 verify_credentials (open on the current access level)."""
+        try:
+            who = requests.get(f"{API}/1.1/account/verify_credentials.json", auth=self._auth, timeout=TIMEOUT)
+        except requests.RequestException as exc:
+            raise PublishError(f"Network error talking to X: {exc}") from exc
+        if not who.ok:
+            raise PublishError(f"Credentials rejected. {_explain(who)}")
+        u = who.json()
+        screen = u.get("screen_name", "")
+        avatar = (u.get("profile_image_url_https") or "").replace("_normal.", "_200x200.")  # bigger picture
+        return AccountProfile(name=u.get("name") or screen, handle=f"@{screen}", url=f"https://x.com/{screen}",
+                              avatar=avatar or None, followers=u.get("followers_count"),
+                              following=u.get("friends_count"), posts=u.get("statuses_count"),
+                              bio=u.get("description") or "")
 
     def check(self) -> AccountStatus:
         """Confirm the credentials, then whether the v2 API (used for posting) is open."""

@@ -68,6 +68,19 @@ METRICS = ("impressions", "members_reached", "reactions", "comments", "reshares"
 
 
 @dataclass(frozen=True)
+class AccountProfile:
+    """Who you're signed in as, for the Social tab. Public profile details only; None = not shared."""
+    name: str
+    handle: str | None = None      # "@rogue0015"
+    url: str | None = None         # the profile page
+    avatar: str | None = None      # picture URL on the platform's own servers
+    followers: int | None = None
+    following: int | None = None
+    posts: int | None = None
+    bio: str = ""
+
+
+@dataclass(frozen=True)
 class AccountStatus:
     connected: bool          # credentials are valid
     can_post: bool           # posting is expected to work
@@ -84,6 +97,10 @@ class Publisher(ABC):
 
     # Optional actions on posts that are already live. Only platforms whose
     # PlatformInfo.features lists them override these.
+
+    def profile(self) -> AccountProfile:
+        """The signed-in account's public profile. Makes network calls; posts nothing."""
+        raise PublishError("This platform doesn't share profile details with the app.")
 
     def delete(self, external_id: str) -> None:
         raise PublishError("This platform can't delete posts from the app.")

@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from backend.app.config import PROJECT_ROOT, Settings
 from backend.app.main import create_app
-from backend.app.platforms import AccountStatus, PostExtras, PublishError, PublishResult, Publisher
+from backend.app.platforms import AccountProfile, AccountStatus, PostExtras, PublishError, PublishResult, Publisher
 
 
 class FakePublisher(Publisher):
@@ -52,6 +52,15 @@ class FakePublisher(Publisher):
 
     def check(self) -> AccountStatus:
         return AccountStatus(True, True, "@tester", "ok")
+
+    profile_calls = 0
+
+    def profile(self) -> AccountProfile:
+        self.profile_calls += 1
+        if self.fail_with:
+            raise PublishError(self.fail_with)
+        return AccountProfile(name="Tester", handle="@tester", url="https://x.test/tester",
+                              avatar="https://x.test/tester.png", followers=12, following=3, posts=40)
 
 
 @pytest.fixture

@@ -61,6 +61,8 @@ export const api = {
   updatePost: (id, post) => request('PUT', `/api/posts/${id}`, post),
   deletePost: (id) => request('DELETE', `/api/posts/${id}`),
   retryPost: (id) => request('POST', `/api/posts/${id}/retry`),
+  /** Send the post's waiting platforms right now. Public, can't be unsent: ask first. */
+  publishNow: (id) => request('POST', `/api/posts/${id}/publish`),
   editLive: (id, platform, text) => request('PUT', `/api/posts/${id}/published/${platform}`, { text }),
   deleteLive: (id, platform) => request('DELETE', `/api/posts/${id}/published/${platform}`),
 
@@ -70,6 +72,8 @@ export const api = {
   refreshStats: () => request('POST', '/api/stats/refresh'),
   importStats: (file) => upload('/api/stats/import', file),
 
+  /** Who you're signed in as on each connected platform (the backend keeps them 10 minutes). */
+  profiles: (refresh = false) => request('GET', `/api/profiles${refresh ? '?refresh=true' : ''}`),
   /** One account for the Social tab. range: {start?, end?} as ISO strings. */
   social: (platform, range = {}) => request('GET', `/api/social/${platform}?${new URLSearchParams(range)}`),
   /** Link to a downloadable report: {format: 'csv'|'xlsx', start, end, platform, source, status}; empty values left out.

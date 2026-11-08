@@ -5,7 +5,8 @@ import { fillDevtoOptions, initDevtoOptions, readDevtoOptions, showDevtoOptions 
 import { openHandoff } from './handoff.js';
 import { renderTargets } from './live.js';
 import {
-  fillPostOptions, initPostOptions, linkedinText, readPostOptions, showPostOptions, suggestLinkCard, suggestLinkedinText,
+  fillPostOptions, initPostOptions, isHandoff, linkedinText, readPostOptions, showPostOptions, suggestLinkCard,
+  suggestLinkedinText,
 } from './post-options.js';
 import { refreshAll, state } from './state.js';
 import {
@@ -120,6 +121,13 @@ function renderTargetStatus(post) {
 function setReadOnly(readOnly) {
   for (const el of $('composer-fields').querySelectorAll('input, textarea, select')) el.disabled = readOnly;
   $('post-save').hidden = readOnly;
+  $('post-now').hidden = readOnly;
+}
+
+/** "LinkedIn", "LinkedIn and Bluesky", "X, LinkedIn and Bluesky". */
+function nameList(ids) {
+  const names = ids.map((id) => state.byId[id]?.name ?? id);
+  return names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
 }
 
 // ---- open ----------------------------------------------------------------
@@ -200,35 +208,45 @@ initPostOptions(updateCounters);
 initDevtoOptions(chosenBlogUrl);
 dialog.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', () => dialog.close()));
 
-form.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const err = $('composer-error');
-  err.textContent = '';
+/** The post as the API takes it, or {error} with a sentence to show. `now`: post right away. */
+function readForm({ now = false } = {}) {
   const platforms = selectedPlatforms();
   const { value: date } = $('post-date');
   const { value: time } = $('post-time');
-  if (!body.value.trim()) return void (err.textContent = 'Write something to post.');
-  if (!platforms.length) return void (err.textContent = 'Choose at least one platform.');
-  if (!date || !time) return void (err.textContent = 'Pick a date and time.');
+  if (!body.value.trim()) return { error: 'Write something to post.' };
+  if (!platforms.length) return { error: 'Choose at least one platform.' };
+  if (!now && (!date || !time)) return { error: 'Pick a date and time.' };
 
   const extra = readPostOptions(platforms, body.value);
-  if (extra.error) return void (err.textContent = extra.error);
+  if (extra.error) return { error: extra.error };
   const devto = readDevtoOptions(platforms, chosenBlogUrl());
-  if (devto.error) return void (err.textContent = devto.error);
+  if (devto.error) return { error: devto.error };
   // Other platforms that can show a link preview (Bluesky) get one for a blog post or a link,
   // the way their own apps do. LinkedIn has its own choice above.
   const cards = Object.fromEntries(platforms
     .filter((id) => id !== 'linkedin' && state.byId[id].features.includes('link_card')
       && (chosenBlogUrl() || /https?:\/\//.test(body.value)))
     .map((id) => [id, { attachment: 'link_card' }]));
-  const payload = {
-    body: body.value,
-    scheduled_at: fromInputs(date, time).toISOString(),
-    platforms,
-    blog_url: chosenBlogUrl(),
-    variants: extra.variants,
-    options: { ...cards, ...extra.options, ...devto.options },
+  return {
+    payload: {
+      body: body.value,
+      scheduled_at: (now ? new Date() : fromInputs(date, time)).toISOString(),
+      platforms,
+      blog_url: chosenBlogUrl(),
+      variants: extra.variants,
+      options: { ...cards, ...extra.options, ...devto.options },
+    },
   };
+}
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const err = $('composer-error');
+  err.textContent = '';
+  const { payload, error } = readForm();
+  if (error) return void (err.textContent = error);
+  const { value: date } = $('post-date');
+  const { value: time } = $('post-time');
   const save = $('post-save');
   save.disabled = true;
   try {
@@ -248,6 +266,48 @@ form.addEventListener('submit', async (e) => {
     err.textContent = ex.message;
   } finally {
     save.disabled = false;
+  }
+});
+
+// Post now: save the post, then send its platforms straight away. Public and can't be unsent, so ask first.
+$('post-now').addEventListener('click', async () => {
+  const err = $('composer-error');
+  err.textContent = '';
+  const { payload, error } = readForm({ now: true });
+  if (error) return void (err.textContent = error);
+  if (payload.platforms.includes('linkedin') && isHandoff()) {
+    return void (err.textContent = 'LinkedIn’s scheduler is chosen in the LinkedIn options. '
+      + 'Pick “This app” there to post it now.');
+  }
+  if (!confirm(`Post this now on ${nameList(payload.platforms)}? It goes public right away and can’t be unsent.`)) return;
+
+  const now = $('post-now');
+  const save = $('post-save');
+  now.disabled = true;
+  save.disabled = true;
+  now.textContent = 'Posting…';
+  try {
+    const saved = editing ? await api.updatePost(editing.id, payload) : await api.createPost(payload);
+    editing = saved;   // if sending fails, trying again updates this post instead of making a second one
+    const sent = await api.publishNow(saved.id);
+    const failed = sent.targets.filter((t) => t.status === 'failed').map((t) => t.platform);
+    const posted = sent.targets.filter((t) => t.status === 'published').map((t) => t.platform);
+    announcePostsChanged();
+    await refreshAll();
+    if (!failed.length) {
+      dialog.close();
+      toast(`Posted on ${nameList(posted)}`);
+    } else {
+      openComposer({ post: sent });   // shows each platform's result and why it failed
+      $('composer-error').textContent = `${nameList(failed)} didn’t go out: see why below, then press Retry failed.`
+        + (posted.length ? ` Posted on ${nameList(posted)}.` : '');
+    }
+  } catch (ex) {
+    err.textContent = ex.message;
+  } finally {
+    now.disabled = false;
+    save.disabled = false;
+    now.textContent = 'Post now';
   }
 });
 
