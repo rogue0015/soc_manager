@@ -1,10 +1,13 @@
 // AI generation tab: Gemini writes one draft per platform from an idea or a blog post (plus an
 // optional event recap), in a persona's style. You review and edit each draft, then open it in
 // the post window to schedule or post it yourself: nothing is posted from here. Every
-// generation is kept in the history. Loads when the tab is shown; no polling. See ADR 0012.
+// generation is kept in the history. Drafts you post or trash leave the list (the history keeps
+// them). A LinkedIn draft with a link can move the link to the first comment.
+// Loads when the tab is shown; no polling. See ADR 0012.
 
 import { aiApi } from './ai-api.js';
 import { openComposer } from './composer.js';
+import { ask, confirmAction } from './modal.js';
 import { initPersonas, openPersonas } from './personas.js';
 import { refreshBlog, state } from './state.js';
 import { onShow } from './tabs.js';
@@ -16,6 +19,11 @@ const edits = new Map();   // "generationId:platform" -> your edited text, while
 let personas = [];
 let history = [];
 let shown = null;          // the generation whose drafts are on screen
+let showHandled = false;   // also list the drafts already posted or trashed
+
+const LINK_RE = /https?:\/\/[^\s<>"]+/g;
+const handled = (d) => Boolean(d.trashed || d.post_id);
+const linksIn = (text) => [...new Set((text.match(LINK_RE) ?? []).map((l) => l.replace(/[.,;:!?)\]]+$/, '')))];
 
 /** Platforms that take written text. dev.to publishes the whole blog post instead. */
 const writable = () => state.platforms.filter((p) => !p.features.includes('article'));
@@ -139,6 +147,49 @@ function counter(p, text, limit = p.char_limit) {
   return { text: `${fmt.num(n)}/${fmt.num(limit)}`, over: n > limit };
 }
 
+/** Open a draft in the post window. If the platform posts a first comment (LinkedIn) and the draft
+ * has a link, ask whether the link should go there instead of in the post. */
+async function openDraft(gen, pid, text) {
+  const p = state.byId[pid];
+  const links = linksIn(text);
+  let firstComment = '';
+  if (links.length && p.features.includes('first_comment')) {
+    const choice = await ask({
+      title: 'Put the link in the first comment?',
+      message: [
+        `This ${p.name} draft has ${links.length === 1 ? 'a link' : 'links'}:`,
+        h('blockquote', { class: 'ask-quote' }, links.join('\n')),
+        `Many people put links in the first comment, because ${p.name} may show posts with links to fewer `
+          + 'people. The app posts the comment right after the post.',
+      ],
+      buttons: [{ label: 'Cancel', value: null }, { label: 'Keep it in the post', value: 'keep' },
+        { label: 'Move to first comment', value: 'move', kind: 'primary', focus: true }],
+    });
+    if (choice == null) return;
+    if (choice === 'move') {
+      firstComment = links.join('\n');
+      for (const link of links) text = text.split(link).join('(link in the first comment)');
+    }
+  }
+  openComposer({
+    platform: pid, text, firstComment, blog: gen.blog_url ? { url: gen.blog_url } : undefined,
+    onSaved: (post) => markUsed(gen, pid, post),
+  });
+}
+
+async function setTrashed(gen, pid, trashed, button) {
+  button.disabled = true;
+  try {
+    shown = await aiApi.trash(gen.id, pid, trashed);
+    toast(trashed ? `${nameOf(pid)} draft trashed` : `${nameOf(pid)} draft is back`);
+    renderDrafts();
+    loadHistory();
+  } catch (ex) {
+    $('ai-error').textContent = ex.message;
+    button.disabled = false;
+  }
+}
+
 function markUsed(gen, platform, post) {
   aiApi.markUsed(gen.id, platform, post.id).then((updated) => {
     if (shown?.id === updated.id) {
@@ -189,27 +240,28 @@ function draftCard(gen, pid) {
     renderUsage();
   });
 
-  const actions = d.error && !d.text ? [regen] : [
-    h('button', {
-      class: 'btn btn-ghost btn-sm', type: 'button',
-      onclick: () => openComposer({
-        platform: pid, text: text.value, blog: gen.blog_url ? { url: gen.blog_url } : undefined,
-        onSaved: (post) => markUsed(gen, pid, post),
-      }),
-    }, 'Open in post window'),
-    h('button', {
-      class: 'btn btn-ghost btn-sm', type: 'button',
-      onclick: () => navigator.clipboard?.writeText(text.value).then(() => toast('Copied'),
-        () => toast('Couldn’t copy. Select the text and press Ctrl+C.', { error: true })),
-    }, 'Copy'),
-    regen,
-  ];
+  const copy = h('button', {
+    class: 'btn btn-ghost btn-sm', type: 'button',
+    onclick: () => navigator.clipboard?.writeText(text.value).then(() => toast('Copied'),
+      () => toast('Couldn’t copy. Select the text and press Ctrl+C.', { error: true })),
+  }, 'Copy');
+  const trash = h('button', { class: 'btn btn-ghost btn-sm', type: 'button' }, d.trashed ? 'Restore' : 'Trash');
+  trash.addEventListener('click', () => setTrashed(gen, pid, !d.trashed, trash));
+  let actions;
+  if (d.post_id) actions = [copy];                     // already a post: nothing left to do here
+  else if (d.trashed) actions = [trash];               // "Restore"
+  else if (d.error && !d.text) actions = [regen, trash];
+  else {
+    actions = [h('button', { class: 'btn btn-ghost btn-sm', type: 'button', onclick: () => openDraft(gen, pid, text.value) },
+      'Open in post window'), copy, regen, trash];
+  }
 
   return h('article', { class: 'ai-draft', 'aria-label': `${p.name} draft` },
     h('div', { class: 'ai-draft-head' },
       h('span', { class: 'swatch', style: { background: p.color }, 'aria-hidden': 'true' }),
       h('strong', {}, p.name),
       d.post_id ? h('span', { class: 'state ok' }, h('span', { 'aria-hidden': 'true' }, '✓ '), 'saved as a post') : null,
+      d.trashed && !d.post_id ? h('span', { class: 'state' }, 'trashed') : null,
       count),
     d.error ? h('p', { class: 'err small' }, d.error) : null,
     d.over ? h('p', { class: 'warn-text small' }, `Still too long for ${p.name} after a second try: shorten it before posting.`) : null,
@@ -230,7 +282,21 @@ function renderDrafts() {
     return;
   }
   $('ai-drafts-meta').textContent = `${shown.persona.name} · ${fmt.dateTime(new Date(shown.created_at))} · ${summary(shown)}`;
-  box.replaceChildren(...shown.platforms.map((pid) => draftCard(shown, pid)));
+  const open = shown.platforms.filter((pid) => !handled(shown.drafts[pid]));
+  const done = shown.platforms.filter((pid) => handled(shown.drafts[pid]));
+  const posted = done.filter((pid) => shown.drafts[pid].post_id).length;
+  const parts = open.map((pid) => draftCard(shown, pid));
+  if (!open.length) parts.push(h('p', { class: 'empty' }, 'Every draft from this generation is posted or trashed.'));
+  if (done.length) {
+    parts.push(h('button', {
+      class: 'btn btn-ghost btn-sm ai-handled-toggle', type: 'button', 'aria-expanded': String(showHandled),
+      onclick: () => { showHandled = !showHandled; renderDrafts(); },
+    }, showHandled ? 'Hide posted and trashed'
+      : `Show posted and trashed (${[posted && `${posted} posted`, done.length - posted && `${done.length - posted} trashed`]
+        .filter(Boolean).join(', ')})`));
+    if (showHandled) parts.push(...done.map((pid) => draftCard(shown, pid)));
+  }
+  box.replaceChildren(...parts);
   for (const li of $('ai-history').children) {
     if (Number(li.dataset.id) === shown.id) li.setAttribute('aria-current', 'true');
     else li.removeAttribute('aria-current');
@@ -247,6 +313,7 @@ function renderHistory() {
   }
   list.replaceChildren(...history.map((gen) => {
     const used = Object.values(gen.drafts).filter((d) => d.post_id).length;
+    const trashed = Object.values(gen.drafts).filter((d) => d.trashed && !d.post_id).length;
     const li = h('li', { 'data-id': gen.id, 'aria-current': shown?.id === gen.id ? 'true' : null },
       h('button', {
         type: 'button', class: 'ai-history-open', title: 'Show these drafts',
@@ -254,11 +321,15 @@ function renderHistory() {
       },
       h('strong', {}, summary(gen)),
       h('span', { class: 'meta' }, [fmt.when(new Date(gen.created_at)), gen.persona.name,
-        gen.platforms.map(nameOf).join(', '), used ? `${used} posted` : null].filter(Boolean).join(' · '))),
+        gen.platforms.map(nameOf).join(', '), used ? `${used} posted` : null, trashed ? `${trashed} trashed` : null]
+        .filter(Boolean).join(' · '))),
       h('button', {
         type: 'button', class: 'icon-btn small-icon', 'aria-label': `Delete this generation (${summary(gen)})`,
         onclick: async () => {
-          if (!confirm('Delete these drafts from the history? Posts made from them stay.')) return;
+          if (!await confirmAction({
+            title: 'Delete from the history?', confirm: 'Delete', danger: true,
+            message: 'These drafts are removed from the history. Posts made from them stay.',
+          })) return;
           try {
             await aiApi.deleteGeneration(gen.id);
             if (shown?.id === gen.id) { shown = null; renderDrafts(); }

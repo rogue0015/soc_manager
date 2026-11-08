@@ -9,11 +9,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from ..platforms import PLATFORMS, PublishError, Publisher
 from ..timeutil import now_iso
 from .attachments import AttachmentError, Attachments
+from .errors import InvalidInput
 from .posts import PostService
 
 log = logging.getLogger(__name__)
@@ -27,6 +30,8 @@ class SchedulerState:
     last_run_at: str | None = None   # UTC ISO time of the last finished check
     last_attempted: int = 0          # posts it tried to send in that check
     last_error: str | None = None    # why the last check crashed, if it did
+    stats_refreshed_at: str | None = None   # last time post statistics were fetched from the platforms
+    stats_problem: str | None = None        # what went wrong then, if anything
 
 
 def publish_due(posts: PostService, publishers: dict[str, Publisher],
@@ -64,12 +69,33 @@ def send_targets(posts: PostService, publishers: dict[str, Publisher], attachmen
             log.info("Published post %s to %s", target["post_id"], platform)
 
 
+async def refresh_stats_now(refresh_stats: Callable[[], dict], state: SchedulerState) -> None:
+    """Fetch post statistics from every platform that shares them. Quiet when none does."""
+    try:
+        result = await asyncio.to_thread(refresh_stats)
+    except InvalidInput:   # no connected platform shares statistics: nothing to do
+        return
+    except Exception as exc:   # a failed refresh must never stop the publisher
+        state.stats_problem = str(exc) or type(exc).__name__
+        log.exception("Refreshing post statistics failed")
+        return
+    state.stats_refreshed_at = now_iso()
+    state.stats_problem = " ".join(result.get("problems") or [])[:500] or None
+
+
 async def run_scheduler(posts: PostService, publishers: dict[str, Publisher],
                         interval: int, stop: asyncio.Event, state: SchedulerState | None = None,
-                        attachments: Attachments | None = None) -> None:
+                        attachments: Attachments | None = None,
+                        refresh_stats: Callable[[], dict] | None = None, stats_every: int = 1800) -> None:
+    """Every `interval` seconds send what's due; every `stats_every` seconds also fetch post statistics,
+    so the Analytics tab shows current numbers without anyone pressing Refresh."""
     state = state or SchedulerState(enabled=True, interval_seconds=interval)
     log.info("Scheduler started (checking every %ss)", interval)
+    stats_due = 0.0   # monotonic time of the next statistics refresh; 0 = at the first check
     while not stop.is_set():
+        if refresh_stats and time.monotonic() >= stats_due:
+            stats_due = time.monotonic() + stats_every
+            await refresh_stats_now(refresh_stats, state)
         try:
             state.last_attempted = await asyncio.to_thread(publish_due, posts, publishers, attachments)
             state.last_error = None

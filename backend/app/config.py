@@ -78,6 +78,9 @@ class Settings:
     # Where the browser reaches the app. Sign-in redirects (OAuth) come back here, so
     # this exact address must be registered with the platform. See ADR 0005.
     public_url: str = "http://localhost:8000"
+    # How often the background job fetches post statistics from platforms that share them
+    # (dev.to, Bluesky, YouTube, ...), so Analytics stays current without pressing Refresh.
+    stats_interval_seconds: int = 1800
     # Secrets from the env file, with real environment variables taking priority.
     # One shared dict: a sign-in updates it in place (services/signin.py).
     secrets: dict[str, str] = field(default_factory=dict, repr=False)
@@ -103,5 +106,6 @@ class Settings:
             scheduler_interval_seconds=int(os.environ.get("SM_SCHEDULER_INTERVAL", "30")),
             serve_frontend=env_flag("SM_SERVE_FRONTEND"),
             public_url=os.environ.get("SM_PUBLIC_URL", default_url).rstrip("/"),
+            stats_interval_seconds=int(os.environ.get("SM_STATS_INTERVAL", "1800")),
             secrets=secrets,
         )

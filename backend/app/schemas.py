@@ -90,3 +90,7 @@ class RegenerateIn(BaseModel):
 
 class DraftUsedIn(BaseModel):
     post_id: int
+
+
+class DraftTrashIn(BaseModel):
+    trashed: bool = True

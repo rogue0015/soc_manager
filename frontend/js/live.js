@@ -5,6 +5,7 @@
 
 import { api } from './api.js';
 import { openHandoff } from './handoff.js';
+import { confirmAction } from './modal.js';
 import { state } from './state.js';
 import { fmt, h, textLength, toast } from './util.js';
 
@@ -45,7 +46,9 @@ function editor(post, t, p, done) {
   update();
   const save = h('button', { class: 'btn btn-primary btn-sm', type: 'button' }, `Save on ${p.name}`);
   save.addEventListener('click', async () => {
-    if (!confirm(`Change the live ${p.name} post to this text? It updates publicly right away.`)) return;
+    if (!await confirmAction({
+      title: `Change the live ${p.name} post?`, message: 'It updates publicly right away.', confirm: `Save on ${p.name}`,
+    })) return;
     save.disabled = true;
     $('composer-error').textContent = '';
     try {
@@ -107,8 +110,10 @@ function line(post, t, done) {
       class: 'btn btn-danger btn-sm', type: 'button',
       onclick: async (e) => {
         const btn = e.currentTarget; // gone from the event once we await
-        if (!confirm(`Delete this post from ${p.name}? It disappears there for everyone and can't be undone. `
-          + 'The planner keeps a record.')) return;
+        if (!await confirmAction({
+          title: `Delete this post from ${p.name}?`, confirm: `Delete on ${p.name}`, danger: true,
+          message: 'It disappears there for everyone and can’t be undone. The planner keeps a record.',
+        })) return;
         btn.disabled = true;
         $('composer-error').textContent = '';
         try {

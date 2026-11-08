@@ -18,6 +18,9 @@ export const aiApi = {
   history: (limit = 30) => request('GET', `/api/ai/generations?limit=${limit}`),
   deleteGeneration: (id) => request('DELETE', `/api/ai/generations/${id}`),
   regenerate: (id, platform) => request('POST', `/api/ai/generations/${id}/regenerate`, { platform }),
+  /** Trash a draft you won't use, or bring it back with trashed = false. */
+  trash: (id, platform, trashed = true) =>
+    request('PUT', `/api/ai/generations/${id}/drafts/${platform}/trash`, { trashed }),
   markUsed: (id, platform, postId) =>
     request('PUT', `/api/ai/generations/${id}/drafts/${platform}/post`, { post_id: postId }),
 };

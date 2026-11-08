@@ -5,6 +5,7 @@
 // Also the test post form, which can go to any connected platform.
 
 import { api } from './api.js';
+import { confirmAction } from './modal.js';
 import { refreshPosts, state } from './state.js';
 import { announcePostsChanged, h, prefs, textLength, toast } from './util.js';
 
@@ -187,7 +188,10 @@ async function sendTestPost(e) {
   const platform = testPlatform();
   const msg = $('test-post-text').value.trim();
   if (!platform || !msg) return;
-  if (!confirm(`Post this publicly on ${platform.name} right now?\n\n${msg}`)) return;
+  if (!await confirmAction({
+    title: `Post on ${platform.name} now?`, confirm: 'Post now',
+    message: ['This posts publicly, right away:', h('blockquote', { class: 'ask-quote' }, msg)],
+  })) return;
   const btn = $('test-post-send');
   btn.disabled = true;
   result.className = 'result';

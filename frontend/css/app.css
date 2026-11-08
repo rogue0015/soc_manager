@@ -635,6 +635,17 @@ dialog.wide { width: min(760px, calc(100vw - 32px)); }
 .persona-item[aria-current="true"] { background: var(--surface-2); box-shadow: inset 3px 0 0 var(--accent); font-weight: 600; }
 .persona-edit { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 
+/* ---- questions (js/modal.js) ------------------------------------------- */
+#ask-dialog { width: min(480px, calc(100vw - 32px)); }
+.ask-message p { margin: 0; }
+.ask-quote {
+  margin: 0; padding: 8px 12px; border-left: 3px solid var(--border); background: var(--surface-2);
+  border-radius: var(--radius-sm); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 200px; overflow-y: auto;
+}
+.ai-handled-toggle { align-self: flex-start; }
+.analytics-live { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); display: inline-block; margin-right: 6px; }
+
 /* ---- toast ------------------------------------------------------------ */
 .toast {
   /* left + right + auto margins centre it; "left: 50%" alone left it only half the screen to wrap in. */

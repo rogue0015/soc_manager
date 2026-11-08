@@ -352,6 +352,16 @@ class AIWriter:
         with self.db.connect() as conn:
             conn.execute("DELETE FROM generations WHERE id = ?", (gen_id,))
 
+    def set_trashed(self, gen_id: int, platform: str, trashed: bool) -> dict[str, Any]:
+        """Trash a draft you won't use (or bring it back). The history keeps it either way."""
+        gen = self.get(gen_id)
+        if platform not in gen["drafts"]:
+            raise NotFound("That platform isn't part of this generation.")
+        gen["drafts"][platform]["trashed"] = trashed
+        with self.db.connect() as conn:
+            conn.execute("UPDATE generations SET drafts=? WHERE id=?", (json.dumps(gen["drafts"]), gen_id))
+        return self.get(gen_id)
+
     def mark_used(self, gen_id: int, platform: str, post_id: int) -> dict[str, Any]:
         """Remember that a draft became a post (it was saved in the post window)."""
         gen = self.get(gen_id)

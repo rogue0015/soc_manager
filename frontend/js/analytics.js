@@ -8,7 +8,7 @@ import { openComposer } from './composer.js';
 import { STAT_LABELS, statsLine } from './live.js';
 import { state } from './state.js';
 import { currentTab, onShow } from './tabs.js';
-import { addDays, fmt, h, prefs } from './util.js';
+import { addDays, fmt, h, prefs, toast } from './util.js';
 
 const $ = (id) => document.getElementById(id);
 const PAGE = 25;
@@ -130,7 +130,7 @@ function renderStatTiles(stats) {
   $('stat-tiles').replaceChildren(...(stats.posts
     ? shown.map(([k, label]) => tile(label[0].toUpperCase() + label.slice(1), fmt.num(stats[k]),
       `over ${fmt.count(stats.posts, 'post')} with stats`))
-    : [h('p', { class: 'empty' }, 'No post stats in this period yet. Import or refresh them on the Social tab.')]));
+    : [h('p', { class: 'empty' }, 'No post stats in this period yet. They arrive on their own from platforms that share them; LinkedIn’s come from its analytics file (Social tab).')]));
 }
 
 function splitBar(row) {
@@ -225,13 +225,48 @@ async function openPost(id) {
 
 // ---- loading ----------------------------------------------------------------
 
-async function load() {
+const LIVE_MS = 60_000;   // refresh while the tab is open; the backend fetches platform numbers on its own
+
+/** "Live · updated 14:02 · platform numbers 12 min ago (every 30 min)". */
+async function renderLive() {
+  const parts = [h('span', {}, h('span', { class: 'live-dot', 'aria-hidden': 'true' }), `Live · updated ${fmt.time(new Date())}`)];
+  try {
+    const s = (await api.system()).scheduler;
+    const every = Math.round((s.stats_every_seconds ?? 1800) / 60);
+    parts.push(h('span', {}, s.stats_refreshed_at
+      ? `Platform numbers ${fmt.ago(new Date(s.stats_refreshed_at))} (every ${every} min)`
+      : s.enabled ? `Platform numbers every ${every} min` : 'Background updates are off (scheduler off)'));
+    if (s.stats_problem) parts.push(h('span', { class: 'warn-text', title: s.stats_problem }, 'Some numbers couldn’t be fetched'));
+  } catch { /* the line stays short */ }
+  $('analytics-live').replaceChildren(...parts);
+}
+
+/** Fetch fresh numbers from the platforms now, then reload. */
+async function refreshNow(e) {
+  const button = e.currentTarget;
+  button.disabled = true;
+  button.textContent = 'Refreshing…';
+  $('analytics-error').textContent = '';
+  try {
+    const r = await api.refreshStats();
+    toast(`Fresh numbers for ${fmt.count(r.updated, 'post')}`);
+  } catch (ex) {
+    // No platform shares numbers automatically: still reload what the app knows.
+    if (!/shares post statistics|isn.t connected/i.test(ex.message)) $('analytics-error').textContent = ex.message;
+  } finally {
+    button.disabled = false;
+    button.textContent = 'Refresh now';
+  }
+  await load();
+}
+
+async function load({ quiet = false } = {}) {
   const { query, start, end } = readFilters();
   prefs.set('analyticsFilters', Object.fromEntries(FILTERS.map((id) => [id, $(id).value])));
   setReportLinks(query);
   const mine = ++requestNo;
   const body = $('analytics-body');
-  body.classList.add('loading'); // keep the previous numbers visible, dimmed, while loading
+  if (!quiet) body.classList.add('loading'); // keep the previous numbers visible, dimmed, while loading
   body.setAttribute('aria-busy', 'true');
   try {
     const report = await api.analytics(query);
@@ -245,6 +280,7 @@ async function load() {
     renderByPlatform(report.by_platform);
     renderReasons(report.failure_reasons);
     renderPosts(report.posts);
+    renderLive();
   } catch (e) {
     if (mine === requestNo) $('analytics-error').textContent = e.message;
   } finally {
@@ -268,12 +304,15 @@ export function initAnalytics() {
   for (const id of FILTERS) {
     const select = $(id);
     if (saved[id] !== undefined && [...select.options].some((o) => o.value === saved[id])) select.value = saved[id];
-    select.addEventListener('change', load);
+    select.addEventListener('change', () => load());
   }
   $('analytics-filters').addEventListener('submit', (e) => e.preventDefault());
   $('post-list-more').addEventListener('click', () => {
     shown += PAGE;
     if (lastReport) renderPosts(lastReport.posts);
   });
-  onShow('analytics', load);
+  $('analytics-refresh').addEventListener('click', refreshNow);
+  // Live: reload quietly every minute while the tab is open (not while it's hidden).
+  setInterval(() => { if (currentTab() === 'analytics' && !document.hidden) load({ quiet: true }); }, LIVE_MS);
+  onShow('analytics', () => load());
 }

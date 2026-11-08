@@ -124,6 +124,39 @@ def test_scheduler_records_each_check(app):
     assert state.last_run_at is not None and state.last_error is None
 
 
+def test_scheduler_also_refreshes_post_stats_in_the_background(app):
+    calls = []
+
+    def refresh():
+        calls.append(1)
+        return {"updated": 2, "problems": []}
+
+    state = SchedulerState(enabled=True, interval_seconds=1)
+
+    async def run():
+        stop = asyncio.Event()
+        task = asyncio.create_task(run_scheduler(app.state.posts, {}, 1, stop, state,
+                                                 refresh_stats=refresh, stats_every=3600))
+        await asyncio.sleep(0.2)
+        stop.set()
+        await task
+
+    asyncio.run(run())
+    assert calls == [1] and state.stats_refreshed_at is not None and state.stats_problem is None
+
+
+def test_no_platform_with_stats_is_not_a_problem(app):
+    from backend.app.services.errors import InvalidInput
+    from backend.app.services.scheduler import refresh_stats_now
+
+    def refresh():
+        raise InvalidInput("No connected platform shares post statistics.")
+
+    state = SchedulerState(enabled=True, interval_seconds=1)
+    asyncio.run(refresh_stats_now(refresh, state))
+    assert state.stats_refreshed_at is None and state.stats_problem is None
+
+
 # ---- analytics -------------------------------------------------------------------
 
 def test_analytics_counts_deliveries_per_platform(app, client):

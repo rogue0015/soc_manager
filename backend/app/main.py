@@ -80,7 +80,8 @@ def create_app(settings: Settings | None = None, publishers: dict[str, Publisher
             if n := posts.recover_interrupted():
                 log.warning("%s post(s) were interrupted mid-publish and marked failed", n)
             task = asyncio.create_task(
-                run_scheduler(posts, publishers, settings.scheduler_interval_seconds, stop, scheduler, attachments)
+                run_scheduler(posts, publishers, settings.scheduler_interval_seconds, stop, scheduler, attachments,
+                              refresh_stats=app.state.live.refresh_stats, stats_every=settings.stats_interval_seconds)
             )
         yield
         stop.set()

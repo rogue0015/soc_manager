@@ -150,6 +150,10 @@ time), **Media** (your pictures and videos), **Analytics** (how did posts do?) a
   platforms (or *All platforms*), pick a persona → **Generate drafts**. Edit each draft, then
   **Open in post window** to schedule or post it. **Regenerate** rewrites one platform's draft;
   **Manage personas** adds, edits and duplicates personas. Past generations are under *History*.
+  **Trash** drafts you won't use (restore them under *Show posted and trashed*); drafts you schedule or
+  post leave the list. A LinkedIn draft with a link asks whether to move the link to the first comment.
+- **Analytics is live:** it updates every minute while open, platform numbers are fetched in the
+  background every 30 minutes (`SM_STATS_INTERVAL`), and **Refresh now** fetches them at once.
 - **Post now:** write the post, tick platforms → **Post now** → confirm. It goes out straight away;
   if a platform fails, the post stays open showing why, with **Retry failed**. Also works on a
   scheduled post: open it → **Post now**.
@@ -229,7 +233,8 @@ Decisions and their reasons: [docs/decisions/](docs/decisions/)
 [0008: Social tab, LinkedIn's scheduler, reports](docs/decisions/0008-social-tab-handoff-reports.md),
 [0009: Bluesky](docs/decisions/0009-bluesky.md),
 [0010: Post now, account profiles](docs/decisions/0010-post-now-and-profiles.md),
-[0012: AI generation](docs/decisions/0012-ai-generation.md)).
+[0012: AI generation](docs/decisions/0012-ai-generation.md),
+[0013: in-app dialogs, live Analytics](docs/decisions/0013-dialogs-and-live-analytics.md)).
 
 ### Data model
 
@@ -686,6 +691,7 @@ an image. Keep it at mode 660: the backend joins its group to write it.
 | `SM_SERVE_FRONTEND` | `on` (Docker backend: `off`) | Whether FastAPI also serves the UI |
 | `SM_PUBLIC_URL` | `http://localhost:$PORT` (Docker: `http://localhost:$SM_PORT`) | Where the browser reaches the app; sign-in redirects return here |
 | `SM_ENV_GID` | `1000` | Docker: group id of the `env` file, so the backend can save sign-in tokens (`stat -c %g env`) |
+| `SM_STATS_INTERVAL` | `1800` | Seconds between background fetches of post statistics from platforms that share them |
 | `PORT` | `8000` | Port for `scripts/dev.sh` |
 | `SM_PORT` | `8080` | Host port for the Docker UI (read by `compose.yaml`) |
 
@@ -882,6 +888,13 @@ Decision record: [0012](docs/decisions/0012-ai-generation.md).
 - Secrets live only in `env`. Never commit them, log them or return them from the API.
 
 ## Changelog
+
+### 2026-11-08: Trash drafts, link in first comment, in-app dialogs, live Analytics
+- AI drafts: **Trash** / Restore; drafts that became posts or were trashed leave the list. A LinkedIn
+  draft with a link asks whether to move it to the first comment.
+- Every browser `confirm()` replaced by an in-app dialog (`js/modal.js`).
+- Analytics: live line, quiet reload every minute while open, **Refresh now**; the background job fetches
+  platform numbers every `SM_STATS_INTERVAL` seconds. ADR [0013](docs/decisions/0013-dialogs-and-live-analytics.md).
 
 ### 2026-11-08: AI generation
 - New **AI generation** tab: Gemini 3.1 Flash-Lite writes one draft per platform from an idea or a

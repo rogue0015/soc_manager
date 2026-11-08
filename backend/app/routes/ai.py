@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Query, Request
 
-from ..schemas import DraftUsedIn, GenerateIn, PersonaIn, RegenerateIn
+from ..schemas import DraftTrashIn, DraftUsedIn, GenerateIn, PersonaIn, RegenerateIn
 
 router = APIRouter(prefix="/api/ai")
 
@@ -75,6 +75,12 @@ def delete_generation(gen_id: int, request: Request):
 def regenerate(gen_id: int, data: RegenerateIn, request: Request):
     """A new draft for one platform, from the same inputs and persona."""
     return request.app.state.ai.regenerate(gen_id, data.platform)
+
+
+@router.put("/generations/{gen_id}/drafts/{platform}/trash")
+def trash_draft(gen_id: int, platform: str, data: DraftTrashIn, request: Request):
+    """Trash a draft (or restore it with {"trashed": false}). The history keeps it."""
+    return request.app.state.ai.set_trashed(gen_id, platform, data.trashed)
 
 
 @router.put("/generations/{gen_id}/drafts/{platform}/post")

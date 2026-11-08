@@ -239,6 +239,11 @@ def test_regenerate_one_platform_mark_used_and_delete(client, fake_gemini):
     used = client.put(f"/api/ai/generations/{gen['id']}/drafts/x/post", json={"post_id": 42}).json()
     assert used["drafts"]["x"]["post_id"] == 42
     assert client.post(f"/api/ai/generations/{gen['id']}/regenerate", json={"platform": "tiktok"}).status_code == 404
+    trashed = client.put(f"/api/ai/generations/{gen['id']}/drafts/bluesky/trash", json={"trashed": True}).json()
+    assert trashed["drafts"]["bluesky"]["trashed"] is True
+    restored = client.put(f"/api/ai/generations/{gen['id']}/drafts/bluesky/trash", json={"trashed": False}).json()
+    assert restored["drafts"]["bluesky"]["trashed"] is False
+    assert client.put(f"/api/ai/generations/{gen['id']}/drafts/tiktok/trash", json={}).status_code == 404
     assert client.delete(f"/api/ai/generations/{gen['id']}").status_code == 204
     assert client.get(f"/api/ai/generations/{gen['id']}").status_code == 404
 

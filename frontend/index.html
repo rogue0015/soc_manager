@@ -234,6 +234,8 @@
     <section class="panel" id="panel-analytics" role="tabpanel" aria-labelledby="tab-analytics" hidden>
       <div class="panel-head">
         <h1>Analytics</h1>
+        <span class="muted small analytics-live" id="analytics-live" aria-live="polite"></span>
+        <button class="btn btn-ghost btn-sm" type="button" id="analytics-refresh">Refresh now</button>
       </div>
       <form class="filters" id="analytics-filters" aria-label="Filters">
         <label class="field"><span>Period</span>
@@ -280,8 +282,8 @@
         <section class="card" aria-labelledby="stats-title">
           <h2 id="stats-title">Post stats</h2>
           <p class="muted small">
-            Totals of the numbers each platform shares. To import LinkedIn’s analytics file or refresh
-            dev.to stats, open that account on the <a href="#social">Social</a> tab.
+            Totals of the numbers each platform shares. Platforms that share them (dev.to, Bluesky, YouTube)
+            are fetched automatically; import LinkedIn’s analytics file on the <a href="#social">Social</a> tab.
           </p>
           <div class="tiles" id="stat-tiles"></div>
         </section>
@@ -395,6 +397,15 @@
           <button class="btn btn-primary" type="submit" id="persona-save">Save persona</button>
         </span>
       </footer>
+    </form>
+  </dialog>
+
+  <!-- Questions and choices (js/modal.js): used instead of the browser's confirm() boxes -->
+  <dialog id="ask-dialog" aria-labelledby="ask-title" aria-describedby="ask-message">
+    <form method="dialog">
+      <header class="dialog-head"><h2 id="ask-title"></h2></header>
+      <div class="dialog-body ask-message" id="ask-message"></div>
+      <footer class="dialog-foot"><span class="spacer"></span><span class="foot-actions" id="ask-buttons"></span></footer>
     </form>
   </dialog>
 

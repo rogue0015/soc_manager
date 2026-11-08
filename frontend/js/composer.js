@@ -5,8 +5,10 @@ import { fillDevtoOptions, initDevtoOptions, readDevtoOptions, showDevtoOptions 
 import { fillMedia, initPostMedia, readMedia, showMedia } from './post-media.js';
 import { openHandoff } from './handoff.js';
 import { renderTargets } from './live.js';
+import { confirmAction } from './modal.js';
 import {
-  fillPostOptions, initPostOptions, isHandoff, linkedinText, readPostOptions, showPostOptions, suggestLinkCard,
+  fillPostOptions, initPostOptions, isHandoff, linkedinText, readPostOptions, setFirstComment, showPostOptions,
+  suggestLinkCard,
   suggestLinkedinText,
 } from './post-options.js';
 import { refreshAll, state } from './state.js';
@@ -140,9 +142,9 @@ function nameList(ids) {
  * openComposer({ media })         new post with a library picture or video (Media tab)
  * openComposer({ blog, date? })   new post prefilled from a blog post
  * openComposer({ platform })      new post for one platform (Social tab)
- * openComposer({ platform, text, blog?, onSaved })  a ready-written draft (AI tab)
+ * openComposer({ platform, text, blog?, firstComment?, onSaved })  a ready-written draft (AI tab)
  */
-export function openComposer({ date, post, blog, platform, media, text, onSaved } = {}) {
+export function openComposer({ date, post, blog, platform, media, text, firstComment, onSaved } = {}) {
   editing = post ?? null;
   afterSave = onSaved ?? null;
   autoText = null;
@@ -187,6 +189,7 @@ export function openComposer({ date, post, blog, platform, media, text, onSaved 
   body.value = post?.body ?? '';
   if (text != null) body.value = text;   // a written draft wins over the blog's own text
   else if (blog) fillFromBlog();
+  if (firstComment) setFirstComment(firstComment);
 
   renderDayPosts(day);
   renderTargetStatus(post);
@@ -294,7 +297,10 @@ $('post-now').addEventListener('click', async () => {
     return void (err.textContent = 'LinkedIn’s scheduler is chosen in the LinkedIn options. '
       + 'Pick “This app” there to post it now.');
   }
-  if (!confirm(`Post this now on ${nameList(payload.platforms)}? It goes public right away and can’t be unsent.`)) return;
+  if (!await confirmAction({
+    title: `Post now on ${nameList(payload.platforms)}?`,
+    message: 'It goes public right away and can’t be unsent.', confirm: 'Post now',
+  })) return;
 
   const now = $('post-now');
   const save = $('post-save');
@@ -329,11 +335,12 @@ $('post-now').addEventListener('click', async () => {
 
 $('post-delete').addEventListener('click', async () => {
   const published = editing?.targets.some((t) => t.status === 'published');
-  const msg = published
-    ? 'Remove this post from the planner? It stays live on the platforms. '
-      + 'To take it down on LinkedIn, use “Delete on LinkedIn” first.'
-    : 'Delete this scheduled post?';
-  if (!editing || !confirm(msg)) return;
+  if (!editing) return;
+  const sure = await confirmAction(published
+    ? { title: 'Remove from the planner?', confirm: 'Remove from planner', danger: true,
+      message: 'It stays live on the platforms. To take it down on LinkedIn, use “Delete on LinkedIn” first.' }
+    : { title: 'Delete this scheduled post?', message: 'It won’t go out.', confirm: 'Delete', danger: true });
+  if (!sure) return;
   try {
     await api.deletePost(editing.id);
     dialog.close();

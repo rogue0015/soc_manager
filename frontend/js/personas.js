@@ -3,6 +3,7 @@
 // or platforms, so any persona works with any platform. The backend checks every field again.
 
 import { aiApi } from './ai-api.js';
+import { confirmAction } from './modal.js';
 import { h, toast } from './util.js';
 
 const $ = (id) => document.getElementById(id);
@@ -91,10 +92,14 @@ export function initPersonas() {
     $('persona-name').value = `${copy.name} copy`;
     $('persona-name').select();
   });
-  $('persona-delete').addEventListener('click', (e) => {
+  $('persona-delete').addEventListener('click', async (e) => {
+    const button = e.currentTarget;
     const name = $('persona-name').value || 'this persona';
-    if (!confirm(`Delete the persona “${name}”? Drafts already written with it keep their own copy.`)) return;
-    work(e.currentTarget, async () => {
+    if (!await confirmAction({
+      title: `Delete the persona “${name}”?`, confirm: 'Delete', danger: true,
+      message: 'Drafts already written with it keep their own copy.',
+    })) return;
+    work(button, async () => {
       await aiApi.deletePersona(current);
       toast(`Deleted “${name}”`);
       current = null;

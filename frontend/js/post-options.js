@@ -70,6 +70,13 @@ export function suggestLinkedinMedia() {
 export const linkedinWantsMedia = () => !isHandoff() && attachment() === 'image';
 
 /** Blog posts default to a link preview (unless something else was chosen). */
+/** Put a link in LinkedIn's first comment (AI drafts): sent by this app, nothing attached to the post. */
+export function setFirstComment(text) {
+  setSender('app');
+  setAttachment('none');
+  $('li-comment').value = text;
+}
+
 export function suggestLinkCard() {
   if (attachment() === 'none' && !isHandoff()) setAttachment('link_card');
 }

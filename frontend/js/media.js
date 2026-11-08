@@ -4,6 +4,7 @@
 import { api } from './api.js';
 import { openCropper } from './cropper.js';
 import { state } from './state.js';
+import { confirmAction } from './modal.js';
 import { onShow } from './tabs.js';
 import { announcePostsChanged, fmt, h, toast } from './util.js';
 
@@ -90,7 +91,10 @@ async function cropCopies(item) {
 }
 
 async function remove(item) {
-  if (!confirm(`Delete “${item.name || 'this file'}” from the library? Posts already published keep it.`)) return;
+  if (!await confirmAction({
+    title: `Delete “${item.name || 'this file'}”?`, confirm: 'Delete', danger: true,
+    message: 'It’s removed from the library. Posts already published keep it.',
+  })) return;
   try {
     await api.deleteMedia(item.id);
     toast('Deleted from the library');
