@@ -9,10 +9,15 @@ Each platform delivery (a post_targets row) is counted on its own, dated by
 when it was published, or by its scheduled time if it hasn't been. The
 response also lists the matching posts, so the browser can group them by
 day or week in local time (the same way the calendar groups by local day).
+
+Imported past posts count as published, but not towards the success rate:
+the app didn't send them. Each target says whether it was imported or handed
+to the platform's own scheduler (ADR 0008).
 """
 
 from __future__ import annotations
 
+import json
 from collections import Counter
 from datetime import datetime
 from typing import Any
@@ -36,9 +41,33 @@ def _rate(published: int, failed: int) -> float | None:
 def _counts(rows: list[dict[str, Any]]) -> dict[str, Any]:
     by_status = Counter(r["status"] for r in rows)
     out: dict[str, Any] = {s: by_status.get(s, 0) for s in STATUSES}
-    out["success_rate"] = _rate(out["published"], out["failed"])
+    sent = Counter(r["status"] for r in rows if not r["imported_at"])
+    out["imported"] = sum(1 for r in rows if r["imported_at"])
+    out["success_rate"] = _rate(sent.get("published", 0), sent.get("failed", 0))
     out["stats"] = _stat_totals(rows)
     return out
+
+
+def deliveries(report: dict[str, Any]) -> list[dict[str, Any]]:
+    """A report's posts flattened to one row per platform delivery, newest first (Social tab, reports)."""
+    return [{**t, "post_id": p["id"], "source": p["source"], "blog_url": p["blog_url"],
+             "scheduled_at": p["scheduled_at"]}
+            for p in report["posts"] for t in p["targets"]]
+
+
+def top_posts(rows: list[dict[str, Any]], n: int = 5) -> list[dict[str, Any]]:
+    """The deliveries with statistics that did best: most impressions, then engagements, then reactions."""
+    def score(r: dict[str, Any]) -> tuple[int, int, int]:
+        m = r["metrics"] or {}
+        return m.get("impressions") or 0, m.get("engagements") or 0, m.get("reactions") or 0
+    return sorted((r for r in rows if r["metrics"]), key=score, reverse=True)[:n]
+
+
+def _handoff(options: str | None) -> bool:
+    try:
+        return bool(json.loads(options or "{}").get("handoff"))
+    except ValueError:
+        return False
 
 
 def _stat_totals(rows: list[dict[str, Any]]) -> dict[str, int]:
@@ -68,7 +97,8 @@ class AnalyticsService:
         # Both times are stored in one UTC ISO format, so text comparison orders them correctly.
         sql = f"""
             SELECT t.id, t.post_id, t.platform, t.status, t.external_url, t.error, t.published_at,
-                   t.warning, t.removed_at, t.edited_at, COALESCE(t.body_override, p.body) AS text,
+                   t.warning, t.removed_at, t.edited_at, t.imported_at, t.options,
+                   COALESCE(t.body_override, p.body) AS text,
                    p.body, p.source, p.blog_url, p.scheduled_at,
                    COALESCE(t.published_at, p.scheduled_at) AS happened_at,
                    m.source AS stats_source, m.updated_at AS stats_updated_at, {", ".join(f"m.{k}" for k in METRICS)}
@@ -97,10 +127,10 @@ class AnalyticsService:
                 "blog_url": r["blog_url"], "scheduled_at": r["scheduled_at"], "targets": [],
             })
             post["targets"].append({
-                "platform": r["platform"], "status": r["status"], "external_url": r["external_url"],
+                "id": r["id"], "platform": r["platform"], "status": r["status"], "external_url": r["external_url"],
                 "error": r["error"], "published_at": r["published_at"], "happened_at": r["happened_at"],
                 "warning": r["warning"], "removed_at": r["removed_at"], "edited_at": r["edited_at"],
-                "text": r["text"],
+                "text": r["text"], "imported": bool(r["imported_at"]), "handoff": _handoff(r["options"]),
                 "metrics": ({"source": r["stats_source"], "updated_at": r["stats_updated_at"],
                              **{k: r[k] for k in METRICS if r[k] is not None}} if r["stats_source"] else None),
             })

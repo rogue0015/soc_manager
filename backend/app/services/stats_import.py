@@ -10,6 +10,10 @@ merged per post. See ADR 0006.
 
 Rows are matched to posts this app published by the post's ID in the link,
 or, failing that, by the publish date when exactly one post went out then.
+Rows that match nothing are past posts (published before this app, or from
+LinkedIn itself): they are added as imported posts with their numbers, so past
+stats show up too (ADR 0008). Importing the same file again updates them.
+A matched hand-off (LinkedIn's own scheduler) gets its link from the file.
 An import never overwrites numbers fetched from the API.
 
 The .xlsx reader uses only the standard library (zipfile + ElementTree) to
@@ -26,6 +30,7 @@ import xml.etree.ElementTree as ET
 from datetime import date, datetime, timedelta
 from typing import Any
 
+from .activity import plural
 from .errors import InvalidInput
 from .posts import PostService
 
@@ -50,6 +55,17 @@ HEADERS = {
 }
 _FIELD_BY_HEADER = {h: field for field, names in HEADERS.items() for h in names}
 _POST_ID = re.compile(r"(?:urn(?::|%3A)li(?::|%3A)(?:activity|share|ugcPost)(?::|%3A)|activity-)(\d{15,22})")
+_TRAILING_ID = re.compile(r"(\d{15,22})\D*$")
+# A past post's text isn't in the analytics file; this stands in for it.
+IMPORTED_TEXT = "LinkedIn post (imported, text not in the file)"
+
+
+def post_id(link: str | None) -> str | None:
+    """LinkedIn's numeric post ID in a link or URN, if there is one."""
+    if not link:
+        return None
+    m = _POST_ID.search(link) or _TRAILING_ID.search(link)
+    return m.group(1) if m else None
 
 
 # ---- reading the file ----------------------------------------------------------------
@@ -186,47 +202,66 @@ class StatsImport:
         if not rows:
             raise InvalidInput("No post table found in that file. Export it from linkedin.com/analytics "
                                "(Posts / Content → Export) and try again.")
-        live = self.posts.live_targets(platform)
-        by_id = {m.group(1): t for t in live if (m := re.search(r"(\d{15,22})$", t["external_id"] or ""))}
+        known = self.posts.published_targets(platform)
+        by_id = {pid: t for t in known
+                 if (pid := post_id(t["external_id"]) or post_id(t["external_url"]))}
         used: set[int] = set()
-        matched, unmatched, skipped = 0, [], 0
+        matched, added, unmatched, skipped = 0, 0, [], 0
         for row in rows:
-            target = self._match(row, by_id, live, used)
+            values = {k: v for k, v in row.items() if k not in ("url", "date")}
+            target = self._match(row, by_id, known, used)
             if target is None:
-                unmatched.append({"url": row["url"], "date": row.get("date").isoformat() if row.get("date") else None})
+                if not row.get("date"):
+                    unmatched.append({"url": row["url"], "date": None})
+                    continue
+                target_id = self._add_past_post(platform, row)
+                added += 1
+                self.posts.save_metrics(target_id, "import", values)
                 continue
             used.add(target["id"])
-            values = {k: v for k, v in row.items() if k not in ("url", "date")}
+            if not target["external_url"]:   # a hand-off: LinkedIn posted it, so the link comes from here
+                pid = post_id(row["url"])
+                self.posts.set_link(target["id"], f"urn:li:activity:{pid}" if pid else None, row["url"])
             if self.posts.save_metrics(target["id"], "import", values):
                 matched += 1
             else:
                 skipped += 1
+        message = self._message(len(rows), matched, added, skipped, len(unmatched))
+        self.posts.activity.record("stats_imported", f"Imported LinkedIn stats. {message}", platform=platform)
         return {
-            "rows": len(rows), "matched": matched, "skipped": skipped,
-            "unmatched": len(unmatched), "unmatched_examples": unmatched[:5],
-            "message": self._message(len(rows), matched, skipped, len(unmatched)),
+            "rows": len(rows), "matched": matched, "added": added, "skipped": skipped,
+            "unmatched": len(unmatched), "unmatched_examples": unmatched[:5], "message": message,
         }
 
+    def _add_past_post(self, platform: str, row: dict[str, Any]) -> int:
+        # The file only has the day. Noon UTC keeps it on that day in every time zone from UTC-11 to UTC+11.
+        when = f"{row['date'].isoformat()}T12:00:00+00:00"
+        pid = post_id(row["url"])
+        return self.posts.record_imported(platform, IMPORTED_TEXT, f"urn:li:activity:{pid}" if pid else None,
+                                          row["url"], when)
+
     @staticmethod
-    def _match(row: dict[str, Any], by_id: dict[str, dict], live: list[dict], used: set[int]) -> dict | None:
-        if (m := _POST_ID.search(row["url"])) and (t := by_id.get(m.group(1))) and t["id"] not in used:
+    def _match(row: dict[str, Any], by_id: dict[str, dict], known: list[dict], used: set[int]) -> dict | None:
+        row_id = post_id(row["url"])
+        if row_id and (t := by_id.get(row_id)) and t["id"] not in used:
             return t
         day = row.get("date")
         if not day:
             return None
         # The export's dates are in your time zone and ours are UTC, so allow a day either side,
-        # and only accept the match when it's the one candidate.
-        near = [t for t in live if t["id"] not in used and t["published_at"]
+        # and only accept the match when it's the one candidate. An imported post with another
+        # LinkedIn ID is a different post; app posts carry a share ID that can't be compared.
+        near = [t for t in known if t["id"] not in used and t["published_at"]
+                and not (t["imported_at"] and row_id and post_id(t["external_id"]) != row_id)
                 and abs((datetime.fromisoformat(t["published_at"]).date() - day).days) <= 1]
         return near[0] if len(near) == 1 else None
 
     @staticmethod
-    def _message(rows: int, matched: int, skipped: int, unmatched: int) -> str:
-        parts = [f"Read {rows} post{'s' if rows != 1 else ''} from the file; "
-                 f"added stats to {matched} of your posts."]
+    def _message(rows: int, matched: int, added: int, skipped: int, unmatched: int) -> str:
+        parts = [f"Read {plural(rows, 'post')} from the file: added stats to {matched} "
+                 f"you already had here and {plural(added, 'past post')}."]
         if skipped:
             parts.append(f"{skipped} already had stats straight from LinkedIn, so they were kept.")
         if unmatched:
-            parts.append(f"{unmatched} didn't match a post published from this app "
-                         "(posted elsewhere, or more than one post that day).")
+            parts.append(f"{unmatched} had no date, so they couldn't be added.")
         return " ".join(parts)

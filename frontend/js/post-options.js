@@ -1,7 +1,8 @@
-// LinkedIn options in the composer: its own text, an image or a link preview,
-// who can see it, reposts, and a first comment. Shown when LinkedIn is chosen.
-// The values go to the API as variants.linkedin and options.linkedin; the
-// backend checks them again (services/posts.py) and is the authority.
+// LinkedIn options in the composer: who posts it (this app, or LinkedIn's own scheduler),
+// its own text, an image or a link preview, who can see it, reposts, and a first comment.
+// Shown when LinkedIn is chosen. When LinkedIn's scheduler posts it, only the text goes
+// over (js/handoff.js), so the other options are hidden. The values go to the API as
+// variants.linkedin and options.linkedin; the backend checks them again (services/posts.py).
 
 import { api } from './api.js';
 import { state } from './state.js';
@@ -15,6 +16,18 @@ let uploading = false;
 let onChange = () => {};
 
 const attachment = () => document.querySelector('input[name=li-attach]:checked').value;
+/** True when LinkedIn's own scheduler posts it (the app only hands the text over). */
+export const isHandoff = () => document.querySelector('input[name=li-sender]:checked').value === 'linkedin';
+
+function showSender() {
+  $('li-app-options').hidden = isHandoff();
+  $('li-handoff-note').hidden = !isHandoff();
+}
+
+function setSender(value) {
+  document.querySelector(`input[name=li-sender][value=${value}]`).checked = true;
+  showSender();
+}
 const setAttachment = (value) => {
   document.querySelector(`input[name=li-attach][value=${value}]`).checked = true;
   showAttachment();
@@ -77,11 +90,12 @@ export function fillPostOptions(target, { blog = false } = {}) {
   showImage(imageId ? `/api/media/${imageId}` : null);
   $('li-image-status').textContent = imageId ? 'Image attached' : 'JPEG, PNG or GIF, up to 8 MB';
   setAttachment(o.attachment ?? (blog ? 'link_card' : 'none'));
+  setSender((target ? o.handoff : prefs.get('liHandoff', false)) ? 'linkedin' : 'app');
 }
 
 /** Blog posts default to a link preview (unless something else was chosen). */
 export function suggestLinkCard() {
-  if (attachment() === 'none') setAttachment('link_card');
+  if (attachment() === 'none' && !isHandoff()) setAttachment('link_card');
 }
 
 /** Prefill LinkedIn's own text (e.g. the full blog summary) unless the user wrote one. */
@@ -92,13 +106,16 @@ export function suggestLinkedinText(text, previous) {
 /** For the API. Returns an error sentence instead when something isn't ready. */
 export function readPostOptions(platformIds, mainText) {
   if (!platformIds.includes(LI)) return { variants: {}, options: {} };
+  const own = linkedinText(mainText);
+  const variants = own !== mainText ? { [LI]: own } : {};
+  prefs.set('liHandoff', isHandoff());
+  if (isHandoff()) return { variants, options: { [LI]: { handoff: true } } };
   if (uploading) return { error: 'Wait for the image to finish uploading.' };
   if (attachment() === 'image' && !imageId) return { error: 'Choose an image for LinkedIn, or attach nothing.' };
   prefs.set('liVisibility', $('li-visibility').value);
   prefs.set('liReshare', $('li-reshare').checked);
-  const own = linkedinText(mainText);
   return {
-    variants: own !== mainText ? { [LI]: own } : {},
+    variants,
     options: {
       [LI]: {
         visibility: $('li-visibility').value,
@@ -117,4 +134,5 @@ export function initPostOptions(changed) {
   $('li-text').addEventListener('input', () => onChange());
   $('li-image-file').addEventListener('change', uploadImage);
   document.querySelectorAll('input[name=li-attach]').forEach((r) => r.addEventListener('change', showAttachment));
+  document.querySelectorAll('input[name=li-sender]').forEach((r) => r.addEventListener('change', showSender));
 }

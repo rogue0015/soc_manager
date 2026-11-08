@@ -15,7 +15,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 # Environment variables with these prefixes are platform keys. Docker passes
 # keys as environment variables, so a new platform's prefix must be added here.
-SECRET_PREFIXES = ("X_", "LINKEDIN_", "META_", "THREADS_")
+SECRET_PREFIXES = ("X_", "LINKEDIN_", "META_", "THREADS_", "DEVTO_", "BLUESKY_")
 
 
 def _env_key(line: str) -> str | None:

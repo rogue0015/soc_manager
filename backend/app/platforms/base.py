@@ -41,6 +41,16 @@ class LinkCard:
 
 
 @dataclass(frozen=True)
+class Article:
+    """A whole blog post, for platforms that publish articles instead of short posts (dev.to)."""
+    title: str
+    markdown: str
+    canonical_url: str           # the blog post: the original, for search engines
+    description: str = ""
+    tags: tuple[str, ...] = ()   # as on the blog; each platform adapts them to its own rules
+
+
+@dataclass(frozen=True)
 class PostExtras:
     """Everything that goes with the text. Platforms use what they support (see PlatformInfo.features)."""
     visibility: str = "PUBLIC"   # PUBLIC | CONNECTIONS
@@ -48,6 +58,8 @@ class PostExtras:
     image: ImageFile | None = None
     link_card: LinkCard | None = None
     first_comment: str = ""
+    article: Article | None = None   # set for platforms with the "article" feature
+    draft: bool = False              # save it as a draft on the platform instead of publishing
 
 
 # Post metrics a platform can report. Keys match the post_metrics table.
@@ -119,8 +131,11 @@ class PlatformInfo:
     char_limit: int
     url_weight: int | None = None  # platforms that shorten links count each URL as this many chars
     # What the app can do on this platform beyond posting text:
-    # edit, delete, image, link_card, first_comment, visibility, stats
+    # edit, delete, image, link_card, first_comment, visibility, stats,
+    # article (publishes the whole blog post instead of the post text), draft,
+    # handoff (its own scheduler can post it: the app opens compose_url), stats_import (analytics file)
     features: tuple[str, ...] = ()
+    compose_url: str | None = None   # the platform's own post box, for handoff; {text} = URL-encoded text
 
     def text_length(self, text: str) -> int:
         if self.url_weight is None:

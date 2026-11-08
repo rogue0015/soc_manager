@@ -70,6 +70,13 @@ export const api = {
   refreshStats: () => request('POST', '/api/stats/refresh'),
   importStats: (file) => upload('/api/stats/import', file),
 
+  /** One account for the Social tab. range: {start?, end?} as ISO strings. */
+  social: (platform, range = {}) => request('GET', `/api/social/${platform}?${new URLSearchParams(range)}`),
+  /** Link to a downloadable report: {format: 'csv'|'xlsx', start, end, platform, source, status}; empty values left out.
+   * Times in the report are in this browser's time zone. */
+  reportUrl: (params) => `/api/reports/posts?${new URLSearchParams(Object.entries(
+    { ...params, utc_offset: -new Date().getTimezoneOffset() }).filter(([, v]) => v !== '' && v != null))}`,
+
   connectors: () => request('GET', '/api/connectors'),
   system: () => request('GET', '/api/system'),
   activity: (limit = 20) => request('GET', `/api/activity?limit=${limit}`),
@@ -81,5 +88,7 @@ export const api = {
 
   blogPosts: () => request('GET', '/api/blog/posts'),
   syncBlog: () => request('POST', '/api/blog/sync'),
+  /** A blog post as the article dev.to gets: {title, description, tags, canonical_url, markdown}. */
+  blogArticle: (url) => request('GET', `/api/blog/article?url=${encodeURIComponent(url)}`),
   planBlog: (plan) => request('POST', '/api/blog/plan', plan),
 };

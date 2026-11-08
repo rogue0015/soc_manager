@@ -48,6 +48,9 @@ class LiveService:
         info = PLATFORMS.get(platform)
         if info is None:
             raise NotFound(f"Unknown platform: {platform}")
+        if "article" in info.features:
+            raise InvalidInput(f"{info.name} publishes whole blog posts, so it can't take a test post. "
+                               "Schedule a blog post for it instead.")
         validate_content(text, [platform])
         publisher = self.publishers.get(platform)
         if publisher is None:

@@ -5,10 +5,12 @@
   blog cache (title, summary, cover image); other links are read from the
   page's own meta tags. If the page can't be read, the post still goes out
   as plain text, with a warning, because the link is in the text anyway.
-- visibility, allow_reshare and first_comment are passed through.
+- article: platforms that publish whole articles (dev.to) get the blog post itself,
+  read fresh from the blog when it goes out (services/article.py).
+- visibility, allow_reshare, first_comment and draft are passed through.
 
-A missing image is an error (you chose it, so posting without it would be a
-surprise); a missing preview card is only a warning.
+A missing image or an unreadable article is an error (posting without it would
+be a surprise); a missing preview card is only a warning.
 """
 
 from __future__ import annotations
@@ -19,8 +21,9 @@ from typing import Any
 import requests
 
 from ..db import Database
-from ..platforms import ImageFile, LinkCard, PostExtras
+from ..platforms import PLATFORMS, Article, ImageFile, LinkCard, PostExtras
 from ..platforms.base import URL_RE
+from .article import ArticleError, ArticleReader
 from .blog import parse_post
 from .errors import NotFound
 from .media import MAX_BYTES, MediaService, sniff_image
@@ -43,10 +46,25 @@ def post_link(target: dict[str, Any]) -> str | None:
 
 class Attachments:
     def __init__(self, db: Database, media: MediaService | None,
-                 fetch: Callable[..., requests.Response] = requests.get):
+                 fetch: Callable[..., requests.Response] = requests.get,
+                 articles: ArticleReader | None = None):
         self.db = db
         self.media = media
         self.fetch = fetch
+        self.articles = articles or ArticleReader(db, fetch)
+
+    def article_for(self, target: dict[str, Any]) -> Article | None:
+        """The blog post as an article, for platforms that publish articles; else None."""
+        info = PLATFORMS.get(target.get("platform", ""))
+        if info is None or "article" not in info.features:
+            return None
+        if not target.get("blog_url"):
+            raise AttachmentError(f"{info.name} publishes whole blog posts, and this post has no blog post. "
+                                  f"Remove {info.name} from it, or schedule a blog post instead.")
+        try:
+            return self.articles.read(target["blog_url"])
+        except ArticleError as exc:
+            raise AttachmentError(str(exc)) from exc
 
     def extras_for(self, target: dict[str, Any]) -> tuple[PostExtras, str | None]:
         """The extras for one delivery, and a warning if something had to be left out."""
@@ -73,6 +91,8 @@ class Attachments:
             image=image,
             link_card=card,
             first_comment=(opts.get("first_comment") or "").strip(),
+            article=self.article_for(target),
+            draft=bool(opts.get("draft")),
         )
         return extras, warning
 

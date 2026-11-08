@@ -87,7 +87,7 @@ function timeline(report, start, end, metric) {
 
 // ---- rendering --------------------------------------------------------------
 
-function tile(label, value, sub, tone = '') {
+export function tile(label, value, sub, tone = '') {
   return h('div', { class: `tile ${tone}` },
     h('div', { class: 'tile-label' }, label),
     h('div', { class: 'tile-value' },
@@ -96,12 +96,15 @@ function tile(label, value, sub, tone = '') {
 }
 
 function renderTiles(t) {
-  const finished = t.published + t.failed;
+  // Imported past posts count as published, but the success rate is about what this app sent.
+  const sent = t.published - (t.imported ?? 0);
+  const finished = sent + t.failed;
   $('kpi-tiles').replaceChildren(
-    tile('Published', fmt.num(t.published), 'deliveries to a platform', t.published ? 'ok' : ''),
+    tile('Published', fmt.num(t.published), t.imported ? `including ${fmt.num(t.imported)} imported` : 'deliveries to a platform',
+      t.published ? 'ok' : ''),
     tile('Failed', fmt.num(t.failed), t.failed ? 'see “Why posts failed”' : 'none', t.failed ? 'bad' : ''),
     tile('Success rate', fmt.percent(t.success_rate),
-      finished ? `${fmt.num(t.published)} of ${fmt.num(finished)} went out` : 'nothing sent yet'),
+      finished ? `${fmt.num(sent)} of ${fmt.num(finished)} sent by the app went out` : 'nothing sent by the app yet'),
     tile('Posts', fmt.num(t.posts), 'matching the filters'));
 }
 
@@ -127,7 +130,7 @@ function renderStatTiles(stats) {
   $('stat-tiles').replaceChildren(...(stats.posts
     ? shown.map(([k, label]) => tile(label[0].toUpperCase() + label.slice(1), fmt.num(stats[k]),
       `over ${fmt.count(stats.posts, 'post')} with stats`))
-    : [h('p', { class: 'empty' }, 'No post stats in this period yet. Import your LinkedIn analytics file to add them.')]));
+    : [h('p', { class: 'empty' }, 'No post stats in this period yet. Import or refresh them on the Social tab.')]));
 }
 
 function splitBar(row) {
@@ -225,6 +228,7 @@ async function openPost(id) {
 async function load() {
   const { query, start, end } = readFilters();
   prefs.set('analyticsFilters', Object.fromEntries(FILTERS.map((id) => [id, $(id).value])));
+  setReportLinks(query);
   const mine = ++requestNo;
   const body = $('analytics-body');
   body.classList.add('loading'); // keep the previous numbers visible, dimmed, while loading
@@ -251,52 +255,12 @@ async function load() {
   }
 }
 
-// ---- post statistics: import, and automatic refresh when LinkedIn allows it ----------
-
-async function loadStatsStatus() {
-  try {
-    const li = (await api.statsStatus()).find((s) => s.platform === 'linkedin');
-    $('stats-auto').textContent = li?.automatic ? 'Automatic stats: on' : 'Automatic stats: off (needs LinkedIn approval)';
-    $('stats-auto').title = li?.reason ?? '';
-    $('stats-refresh').hidden = !li?.automatic;
-  } catch {
-    $('stats-auto').textContent = '';
-  }
-}
-
-async function statsAction(button, work, busyText) {
-  const result = $('stats-result');
-  button.setAttribute('aria-disabled', 'true');
-  button.classList.add('busy');
-  result.className = 'result';
-  result.textContent = busyText;
-  try {
-    const message = await work();
-    result.className = 'result ok';
-    result.textContent = message;
-    toast(message.split('.')[0]);
-    await load();
-  } catch (ex) {
-    result.className = 'result bad';
-    result.textContent = ex.message;
-  } finally {
-    button.removeAttribute('aria-disabled');
-    button.classList.remove('busy');
-  }
+/** Download links for the report of exactly what the filters show. */
+function setReportLinks(query) {
+  for (const format of ['xlsx', 'csv']) $(`analytics-report-${format}`).href = api.reportUrl({ ...query, format });
 }
 
 export function initAnalytics() {
-  const file = $('stats-file');
-  file.addEventListener('change', () => {
-    const chosen = file.files[0];
-    file.value = '';
-    if (chosen) statsAction(file.closest('label'), async () => (await api.importStats(chosen)).message, 'Reading the file…');
-  });
-  $('stats-refresh').addEventListener('click', (e) => statsAction(e.currentTarget, async () => {
-    const r = await api.refreshStats();
-    return `Updated stats for ${fmt.count(r.updated, 'post')}.${r.problems.length ? ` Problems: ${r.problems.join(' ')}` : ''}`;
-  }, 'Asking LinkedIn…'));
-  onShow('analytics', loadStatsStatus);
   window.addEventListener('sm:posts-changed', () => { if (currentTab() === 'analytics') load(); });
 
   $('f-platform').append(...state.platforms.map((p) => h('option', { value: p.id }, p.name)));

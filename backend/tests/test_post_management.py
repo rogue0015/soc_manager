@@ -208,8 +208,12 @@ def test_a_post_that_went_out_with_a_problem_keeps_the_warning(li_app, c, fake_l
 # ---- statistics ---------------------------------------------------------------------------
 
 def test_stats_status_says_why_automatic_stats_are_off(c):
-    assert c.get("/api/stats").json() == [{"platform": "linkedin", "connected": True, "automatic": False,
-                                           "reason": "This platform doesn't share post statistics with the app."}]
+    assert c.get("/api/stats").json() == [
+        {"platform": "linkedin", "connected": True, "automatic": False,
+         "reason": "This platform doesn't share post statistics with the app."},
+        {"platform": "devto", "connected": False, "automatic": False, "reason": "dev.to isn't connected."},
+        {"platform": "bluesky", "connected": False, "automatic": False, "reason": "Bluesky isn't connected."},
+    ]
     assert c.post("/api/stats/refresh").status_code == 422
 
 
@@ -239,8 +243,9 @@ def test_import_matches_posts_by_their_id(li_app, c):
                 "https://www.linkedin.com/feed/update/urn:li:activity:7999999999999999999/,11/01/2026,10,1\n")
     r = c.post("/api/stats/import", content=csv_file.encode())
     assert r.status_code == 200
-    assert (r.json()["matched"], r.json()["unmatched"]) == (1, 1)
-    metrics = target(c.get("/api/posts").json()[0])["metrics"]
+    assert (r.json()["matched"], r.json()["added"], r.json()["unmatched"]) == (1, 1, 0)
+    mine = next(p for p in c.get("/api/posts").json() if p["id"] == 1)
+    metrics = target(mine)["metrics"]
     assert (metrics["impressions"], metrics["engagements"], metrics["source"]) == (1234, 56, "import")
 
 

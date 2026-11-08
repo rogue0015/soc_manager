@@ -100,7 +100,8 @@ async function checkPlatform(id) {
 
 // ---- test post --------------------------------------------------------------
 
-const connectedPlatforms = () => state.platforms.filter((p) => p.has_adapter);
+// dev.to publishes whole blog posts, so it can't take a short test message.
+const connectedPlatforms = () => state.platforms.filter((p) => p.has_adapter && !p.features.includes('article'));
 const testPlatform = () => state.byId[$('test-post-platform').value];
 
 function fillTestPlatforms() {

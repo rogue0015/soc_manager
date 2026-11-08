@@ -33,6 +33,7 @@ def publish_due(posts: PostService, publishers: dict[str, Publisher],
                 attachments: Attachments | None = None) -> int:
     """Send every due target once, with its image / link card / options. Returns how many were attempted."""
     attachments = attachments or Attachments(posts.db, media=None)
+    posts.settle_handoffs()   # posted by the platform's own scheduler; nothing to send
     due = posts.claim_due()
     for target in due:
         platform = target["platform"]

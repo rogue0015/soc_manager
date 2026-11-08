@@ -11,7 +11,7 @@ from typing import Literal
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Query, Request
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse, Response
 from pydantic import AwareDatetime
 
 from ..platforms import PLATFORMS
@@ -115,6 +115,26 @@ def analytics(request: Request, start: AwareDatetime | None = None, end: AwareDa
               platform: str | None = None, source: Literal["custom", "blog"] | None = None,
               status: Literal["scheduled", "publishing", "published", "failed"] | None = None):
     return request.app.state.analytics.report(start, end, platform, source, status)
+
+
+@router.get("/social/{platform}")
+def social_overview(platform: str, request: Request, start: AwareDatetime | None = None,
+                    end: AwareDatetime | None = None):
+    """One platform for the Social tab: upcoming posts, history and stats for the period, top posts."""
+    return request.app.state.social.overview(platform, start, end)
+
+
+@router.get("/reports/posts")
+def download_report(request: Request, format: Literal["csv", "xlsx"] = "csv",
+                    start: AwareDatetime | None = None, end: AwareDatetime | None = None,
+                    platform: str | None = None, source: Literal["custom", "blog"] | None = None,
+                    status: Literal["scheduled", "publishing", "published", "failed"] | None = None,
+                    utc_offset: int = Query(0, ge=-840, le=840)):
+    """Every delivery matching the filters, as a CSV or an Excel workbook with a summary sheet."""
+    name, media_type, content = request.app.state.reports.build(format, start, end, platform, source, status,
+                                                                utc_offset)
+    return Response(content, media_type=media_type,
+                    headers={"Content-Disposition": f'attachment; filename="{name}"', "Cache-Control": "no-store"})
 
 
 # ---- scheduled posts ------------------------------------------------------
@@ -223,6 +243,12 @@ def list_blog_posts(request: Request):
 @router.post("/blog/sync")
 def sync_blog(request: Request):
     return request.app.state.blog.sync()
+
+
+@router.get("/blog/article")
+def preview_article(request: Request, url: str = Query(min_length=1, max_length=2000)):
+    """A blog post as the article dev.to would get: title, summary, tags and the text as Markdown."""
+    return request.app.state.articles.preview(url)
 
 
 @router.post("/blog/plan", status_code=201)

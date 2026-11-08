@@ -1,6 +1,8 @@
 // Composer dialog: create a post for a day, or view/edit an existing one.
 
 import { api } from './api.js';
+import { fillDevtoOptions, initDevtoOptions, readDevtoOptions, showDevtoOptions } from './devto-options.js';
+import { openHandoff } from './handoff.js';
 import { renderTargets } from './live.js';
 import {
   fillPostOptions, initPostOptions, linkedinText, readPostOptions, showPostOptions, suggestLinkCard, suggestLinkedinText,
@@ -45,11 +47,14 @@ export const pickedPlatforms = (container) =>
 
 const selectedPlatforms = () => pickedPlatforms($('platform-picks'));
 const source = () => form.querySelector('input[name=source]:checked').value;
+const chosenBlogUrl = () => (source() === 'blog' && blogPick.value ? blogPick.value : null);
+const isArticle = (p) => p.features?.includes('article');
 
 function updateCounters() {
   const ids = selectedPlatforms();
   $('post-counters').replaceChildren(...ids.map((id) => {
     const p = state.byId[id];
+    if (isArticle(p)) return h('span', { class: 'counter' }, `${p.name}: whole blog post`);
     const n = textLength(p, id === 'linkedin' ? linkedinText(body.value) : body.value);
     return h('span', { class: `counter${n > p.char_limit ? ' over' : ''}` }, `${p.name}: ${n}/${p.char_limit}`);
   }));
@@ -78,6 +83,8 @@ function setSource(value) {
   form.querySelector(`input[name=source][value=${value}]`).checked = true;
   $('blog-pick-field').hidden = value !== 'blog';
 }
+
+const showArticleOptions = () => showDevtoOptions(selectedPlatforms(), chosenBlogUrl());
 
 function renderBlogOptions(selectedUrl) {
   blogPick.replaceChildren(
@@ -121,8 +128,9 @@ function setReadOnly(readOnly) {
  * openComposer({ date })          new post on a day
  * openComposer({ post })          view / edit an existing post
  * openComposer({ blog, date? })   new post prefilled from a blog post
+ * openComposer({ platform })      new post for one platform (Social tab)
  */
-export function openComposer({ date, post, blog } = {}) {
+export function openComposer({ date, post, blog, platform } = {}) {
   editing = post ?? null;
   autoText = null;
   autoLiText = null;
@@ -143,10 +151,12 @@ export function openComposer({ date, post, blog } = {}) {
   $('post-date').min = dateKey(new Date());
   $('post-time').value = when ? timeValue(when) : defaultTimeFor(day);
 
-  const platforms = post ? post.targets.map((t) => t.platform) : prefs.get('lastPlatforms', ['x']);
+  const platforms = post ? post.targets.map((t) => t.platform)
+    : platform ? [platform] : prefs.get('lastPlatforms', ['x']);
   renderPlatformPicks($('platform-picks'), platforms, () => {
     prefs.set('lastPlatforms', selectedPlatforms());
     showPostOptions(selectedPlatforms());
+    showArticleOptions();
     fillFromBlog();
     updateCounters();
   });
@@ -154,15 +164,20 @@ export function openComposer({ date, post, blog } = {}) {
   const blogUrl = post?.blog_url ?? blog?.url ?? '';
   showPostOptions(platforms);
   fillPostOptions(post?.targets.find((t) => t.platform === 'linkedin'), { blog: Boolean(blogUrl) });
+  fillDevtoOptions(post?.targets.find((t) => t.platform === 'devto'));
   renderBlogOptions(blogUrl);
   setSource(blogUrl ? 'blog' : 'custom');
+  showArticleOptions();
   body.value = post?.body ?? '';
   if (blog) fillFromBlog();
 
   renderDayPosts(day);
   renderTargetStatus(post);
   setReadOnly(Boolean(published));
-  if (published) $('li-options').hidden = true; // the live post's state is shown per platform below
+  if (published) { // the live post's state is shown per platform below
+    $('li-options').hidden = true;
+    $('devto-options').hidden = true;
+  }
   updateCounters();
 
   if (!dialog.open) dialog.showModal();
@@ -172,15 +187,17 @@ export function openComposer({ date, post, blog } = {}) {
 // ---- events --------------------------------------------------------------
 
 body.addEventListener('input', updateCounters);
-blogPick.addEventListener('change', () => { body.value = ''; fillFromBlog(); });
+blogPick.addEventListener('change', () => { body.value = ''; fillFromBlog(); showArticleOptions(); });
 form.querySelectorAll('input[name=source]').forEach((r) => r.addEventListener('change', () => {
   setSource(source());
+  showArticleOptions();
   if (source() === 'blog') {
     suggestLinkCard();
     blogPick.focus();
   }
 }));
 initPostOptions(updateCounters);
+initDevtoOptions(chosenBlogUrl);
 dialog.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', () => dialog.close()));
 
 form.addEventListener('submit', async (e) => {
@@ -196,21 +213,35 @@ form.addEventListener('submit', async (e) => {
 
   const extra = readPostOptions(platforms, body.value);
   if (extra.error) return void (err.textContent = extra.error);
+  const devto = readDevtoOptions(platforms, chosenBlogUrl());
+  if (devto.error) return void (err.textContent = devto.error);
+  // Other platforms that can show a link preview (Bluesky) get one for a blog post or a link,
+  // the way their own apps do. LinkedIn has its own choice above.
+  const cards = Object.fromEntries(platforms
+    .filter((id) => id !== 'linkedin' && state.byId[id].features.includes('link_card')
+      && (chosenBlogUrl() || /https?:\/\//.test(body.value)))
+    .map((id) => [id, { attachment: 'link_card' }]));
   const payload = {
     body: body.value,
     scheduled_at: fromInputs(date, time).toISOString(),
     platforms,
-    blog_url: source() === 'blog' && blogPick.value ? blogPick.value : null,
+    blog_url: chosenBlogUrl(),
     variants: extra.variants,
-    options: extra.options,
+    options: { ...cards, ...extra.options, ...devto.options },
   };
   const save = $('post-save');
   save.disabled = true;
   try {
-    if (editing) await api.updatePost(editing.id, payload);
-    else await api.createPost(payload);
+    const saved = editing ? await api.updatePost(editing.id, payload) : await api.createPost(payload);
     dialog.close();
-    toast(editing ? 'Post updated' : `Scheduled for ${fmt.shortDate(fromInputs(date, time))} at ${time}`);
+    // LinkedIn's own scheduler posts it: show how to hand the text over.
+    const handoff = saved.targets.find((t) => t.options?.handoff && t.status === 'scheduled');
+    if (handoff) {
+      toast('Saved. Now schedule it in LinkedIn.');
+      openHandoff({ platform: handoff.platform, text: handoff.text, when: new Date(saved.scheduled_at) });
+    } else {
+      toast(editing ? 'Post updated' : `Scheduled for ${fmt.shortDate(fromInputs(date, time))} at ${time}`);
+    }
     announcePostsChanged();
     await refreshAll();
   } catch (ex) {

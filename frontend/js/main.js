@@ -5,6 +5,8 @@ import { initBlog, renderBlog } from './blog.js';
 import { renderCalendar, renderLegend } from './calendar.js';
 import { openComposer } from './composer.js';
 import { initConnections } from './connections.js';
+import { initHandoff } from './handoff.js';
+import { initSocial } from './social.js';
 import { loadPlatforms, refreshPosts, setMonth, state, subscribe } from './state.js';
 import { initStatus } from './status.js';
 import { currentTab, initTabs } from './tabs.js';
@@ -41,6 +43,8 @@ async function start() {
 
   initConnections();
   initStatus();
+  initHandoff();
+  initSocial();
   initAnalytics();
   initTabs();
   await Promise.all([refreshPosts(), initBlog()]);

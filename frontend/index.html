@@ -17,6 +17,7 @@
     </div>
     <nav class="tabs" role="tablist" aria-label="Sections">
       <button class="tab" type="button" role="tab" id="tab-status" aria-controls="panel-status" data-tab="status">Status</button>
+      <button class="tab" type="button" role="tab" id="tab-social" aria-controls="panel-social" data-tab="social">Social</button>
       <button class="tab" type="button" role="tab" id="tab-analytics" aria-controls="panel-analytics" data-tab="analytics">Analytics</button>
       <button class="tab" type="button" role="tab" id="tab-scheduler" aria-controls="panel-scheduler" data-tab="scheduler">Scheduler</button>
     </nav>
@@ -67,6 +68,82 @@
       </div>
     </section>
 
+    <!-- Social: one account at a time, picked in the sidebar: its posts, stats, imports and reports (js/social.js) -->
+    <section class="panel" id="panel-social" role="tabpanel" aria-labelledby="tab-social" hidden>
+      <div class="social-layout">
+        <div class="social-side">
+          <nav class="social-nav" aria-label="Social accounts">
+            <ul id="social-nav-list"></ul>
+          </nav>
+          <section class="card social-site" aria-labelledby="site-title">
+            <h2 id="site-title">Your website</h2>
+            <p class="muted small">Visits to rogue0015.github.io, counted by GoatCounter.</p>
+            <a class="btn btn-ghost btn-sm" href="https://rogue0015.goatcounter.com" target="_blank" rel="noopener">
+              Website stats <span aria-hidden="true">↗</span></a>
+          </section>
+        </div>
+
+        <div class="social-main">
+          <div class="panel-head">
+            <h1 class="social-title"><span class="swatch" id="social-swatch" aria-hidden="true"></span>
+              <span id="social-name">Social</span></h1>
+            <span class="badge-state" id="social-state"></span>
+            <label class="field inline push-right"><span>Period</span>
+              <select id="social-period">
+                <option value="30">Last 30 days</option>
+                <option value="90" selected>Last 90 days</option>
+                <option value="365">Last 12 months</option>
+                <option value="all">All time</option>
+              </select>
+            </label>
+            <button class="btn btn-primary" type="button" id="social-new">+ New post</button>
+          </div>
+          <p class="form-error" id="social-error" role="alert"></p>
+
+          <div class="social-grid" id="social-body">
+            <section class="card" aria-labelledby="social-upcoming-title">
+              <div class="section-head">
+                <h2 id="social-upcoming-title">Coming up</h2>
+                <span class="muted small" id="social-upcoming-count"></span>
+              </div>
+              <ul class="social-list" id="social-upcoming"></ul>
+            </section>
+
+            <section class="card" aria-labelledby="social-stats-title">
+              <h2 id="social-stats-title">Stats</h2>
+              <div class="tiles social-tiles" id="social-tiles"></div>
+              <h3 class="list-title">Best posts</h3>
+              <ol class="social-list" id="social-top"></ol>
+            </section>
+
+            <section class="card social-wide" aria-labelledby="social-history-title">
+              <div class="section-head">
+                <h2 id="social-history-title">Past posts</h2>
+                <span class="muted small" id="social-history-count"></span>
+              </div>
+              <ul class="social-list" id="social-history"></ul>
+              <button class="btn btn-ghost btn-sm" type="button" id="social-history-more" hidden>Show more</button>
+            </section>
+
+            <section class="card" aria-labelledby="social-import-title">
+              <h2 id="social-import-title">Import and refresh stats</h2>
+              <div id="social-import"></div>
+              <p class="result" id="social-import-result" role="status"></p>
+            </section>
+
+            <section class="card" aria-labelledby="social-report-title">
+              <h2 id="social-report-title">Reports</h2>
+              <p class="muted small" id="social-report-note"></p>
+              <div class="row wrap">
+                <a class="btn btn-ghost btn-sm" id="social-report-xlsx" download>Download Excel</a>
+                <a class="btn btn-ghost btn-sm" id="social-report-csv" download>Download CSV</a>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- Analytics: what was published and how it went, with one row of filters -->
     <section class="panel" id="panel-analytics" role="tabpanel" aria-labelledby="tab-analytics" hidden>
       <div class="panel-head">
@@ -98,31 +175,28 @@
           </select>
         </label>
       </form>
-      <p class="muted small note">
-        Publishing figures come from this app. Impressions, reactions and comments come from
-        your LinkedIn analytics file (see “LinkedIn post stats” below); X doesn’t share them yet.
-      </p>
+      <div class="row wrap between analytics-note">
+        <p class="muted small note">
+          Publishing figures come from this app. Views, reactions and comments come from dev.to and
+          your LinkedIn analytics file (import it on the <a href="#social">Social</a> tab); X doesn’t share them yet.
+        </p>
+        <div class="row wrap">
+          <span class="muted small">Download this view:</span>
+          <a class="btn btn-ghost btn-sm" id="analytics-report-xlsx" download>Excel</a>
+          <a class="btn btn-ghost btn-sm" id="analytics-report-csv" download>CSV</a>
+        </div>
+      </div>
 
       <div class="analytics-body" id="analytics-body">
         <p class="form-error" id="analytics-error" role="alert"></p>
         <div class="tiles" id="kpi-tiles"></div>
 
         <section class="card" aria-labelledby="stats-title">
-          <div class="section-head">
-            <h2 id="stats-title">LinkedIn post stats</h2>
-            <span class="muted small" id="stats-auto"></span>
-          </div>
+          <h2 id="stats-title">Post stats</h2>
           <p class="muted small">
-            LinkedIn only shares per-post numbers with approved company apps, so import them: on
-            <a href="https://www.linkedin.com/analytics/creator/content/" target="_blank" rel="noopener">LinkedIn analytics</a>
-            press <strong>Export</strong>, then choose that file here. Numbers appear on each post below.
+            Totals of the numbers each platform shares. To import LinkedIn’s analytics file or refresh
+            dev.to stats, open that account on the <a href="#social">Social</a> tab.
           </p>
-          <div class="row wrap">
-            <label class="btn btn-ghost btn-sm file-btn">Import analytics file…
-              <input type="file" id="stats-file" accept=".xlsx,.csv"></label>
-            <button class="btn btn-ghost btn-sm" type="button" id="stats-refresh" hidden>Refresh from LinkedIn</button>
-          </div>
-          <p class="result" id="stats-result" role="status"></p>
           <div class="tiles" id="stat-tiles"></div>
         </section>
 
@@ -149,7 +223,8 @@
 
         <section class="card" aria-labelledby="post-list-title">
           <h2 id="post-list-title">Posts</h2>
-          <p class="muted small">Click a post to open it. Published LinkedIn posts can be edited or deleted there.</p>
+          <p class="muted small">Click a post to open it. There you can edit or delete a published LinkedIn post,
+            or open a dev.to article.</p>
           <ul class="post-list" id="post-list"></ul>
           <button class="btn btn-ghost btn-sm" type="button" id="post-list-more" hidden>Show more</button>
         </section>
@@ -228,10 +303,21 @@
         <!-- Shown when LinkedIn is chosen (js/post-options.js) -->
         <fieldset class="field platform-options" id="li-options" hidden>
           <legend><span class="swatch" id="li-swatch" aria-hidden="true"></span> LinkedIn options</legend>
+          <div class="field">
+            <span id="li-sender-label">Who posts it</span>
+            <div class="segmented" role="radiogroup" aria-labelledby="li-sender-label">
+              <label><input type="radio" name="li-sender" value="app" checked> This app</label>
+              <label><input type="radio" name="li-sender" value="linkedin"> LinkedIn’s scheduler</label>
+            </div>
+            <p class="muted small" id="li-handoff-note" hidden>After you save, the app copies the text and opens
+              LinkedIn, where you set the same time. LinkedIn then posts it, even when this computer is off.
+              Add any image in LinkedIn.</p>
+          </div>
           <label class="field" id="li-text-field" hidden>
             <span>LinkedIn version <span class="muted">(optional; the other platforms get the text above)</span></span>
             <textarea id="li-text" rows="4" placeholder="Leave empty to post the same text on LinkedIn"></textarea>
           </label>
+          <div class="stack" id="li-app-options">
           <div class="field">
             <span id="li-attach-label">Attach</span>
             <div class="segmented" role="radiogroup" aria-labelledby="li-attach-label">
@@ -263,6 +349,23 @@
           <label class="field"><span>First comment <span class="muted">(optional; posted right after the post)</span></span>
             <textarea id="li-comment" rows="2" maxlength="1250" placeholder="e.g. the link to your blog post"></textarea>
           </label>
+          </div>
+        </fieldset>
+
+        <!-- Shown when dev.to is chosen (js/devto-options.js) -->
+        <fieldset class="field platform-options" id="devto-options" hidden>
+          <legend><span class="swatch" id="devto-swatch" aria-hidden="true"></span> dev.to options</legend>
+          <p class="muted small">dev.to gets the whole blog post as an article, word for word, with your blog
+            marked as the original. The post text above isn’t used there.</p>
+          <p class="warn-text small" id="devto-needs-blog" hidden>dev.to only takes blog posts. Choose
+            <strong>From my blog</strong> above and pick a post, or untick dev.to.</p>
+          <label class="check"><input type="checkbox" id="devto-publish" checked> Publish on dev.to right away</label>
+          <p class="muted small devto-draft-note">Untick to save it as a draft on dev.to, then publish it there yourself.</p>
+          <div class="row wrap">
+            <button class="btn btn-ghost btn-sm" type="button" id="devto-preview-btn">Preview article</button>
+            <span class="muted small" id="devto-preview-status" role="status"></span>
+          </div>
+          <pre class="article-preview" id="devto-preview" tabindex="0" aria-label="Article preview, as Markdown" hidden></pre>
         </fieldset>
 
         <div class="row two">
@@ -280,6 +383,32 @@
         <span class="spacer"></span>
         <button class="btn btn-ghost" type="button" data-close>Cancel</button>
         <button class="btn btn-primary" type="submit" id="post-save">Schedule</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <!-- Hand a post to LinkedIn's own scheduler (js/handoff.js) -->
+  <dialog id="handoff-dialog" aria-labelledby="handoff-title">
+    <form method="dialog" novalidate>
+      <header class="dialog-head">
+        <h2 id="handoff-title">Finish in LinkedIn</h2>
+        <button class="icon-btn" type="button" data-close aria-label="Close">×</button>
+      </header>
+      <div class="dialog-body">
+        <p><span id="handoff-name">LinkedIn</span> posts this at the time you set there, even when this computer is off.</p>
+        <ol class="steps">
+          <li>Press <strong>Copy text and open <span class="handoff-platform">LinkedIn</span></strong>.</li>
+          <li>If the post box is empty, paste the text (Ctrl+V, or ⌘V on a Mac).</li>
+          <li>Click the clock icon next to <strong>Post</strong>, set <strong id="handoff-when"></strong>,
+            then press <strong>Schedule</strong>.</li>
+        </ol>
+        <label class="field"><span>Text</span><textarea id="handoff-text" rows="6" readonly></textarea></label>
+        <p class="result" id="handoff-result" role="status"></p>
+      </div>
+      <footer class="dialog-foot">
+        <span class="spacer"></span>
+        <button class="btn btn-ghost" type="button" data-close>Done</button>
+        <button class="btn btn-primary" type="button" id="handoff-open">Copy text and open LinkedIn</button>
       </footer>
     </form>
   </dialog>

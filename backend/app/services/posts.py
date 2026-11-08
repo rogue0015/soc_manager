@@ -2,8 +2,16 @@
 
 A post has one main text and one time, and a target row per platform. A
 target can carry its own text (body_override, e.g. a longer LinkedIn version)
-and options as JSON (visibility, reposts, image, link card, first comment);
-which options a platform honours is listed in PlatformInfo.features.
+and options as JSON (visibility, reposts, image, link card, first comment,
+draft); which options a platform honours is listed in PlatformInfo.features.
+Platforms with the "article" feature (dev.to) publish the blog post itself
+instead of the text, so they only accept posts made from a blog post.
+
+Hand-off (option `handoff`, LinkedIn): the platform's own scheduler posts it,
+because LinkedIn's API only publishes immediately. The app keeps the post on
+its calendar but never sends it; once its time has passed it is recorded as
+published (settle_handoffs). See docs/decisions/0008-social-tab-handoff-reports.md.
+Imported deliveries (imported_at) are past posts read from a platform's export.
 
 Target lifecycle:  scheduled -> publishing -> published | failed
                    failed --retry--> scheduled
@@ -37,13 +45,19 @@ DEFAULT_OPTIONS: dict[str, Any] = {
     "image_id": None,
     "image_alt": "",
     "first_comment": "",
+    "draft": False,                # save as a draft on the platform (dev.to) instead of publishing
+    "handoff": False,              # the platform's own scheduler posts it (LinkedIn); the app doesn't send it
 }
 # Which feature each non-default option needs, and the words for the error message.
 OPTION_NEEDS = {
     "visibility": ("visibility", "PUBLIC", "limit who sees a post"),
     "allow_reshare": ("visibility", True, "turn off reposts"),
     "first_comment": ("first_comment", "", "add a first comment"),
+    "draft": ("draft", False, "save a draft"),
+    "handoff": ("handoff", False, "schedule posts on its own side"),
 }
+# Shared by the SQL below: is this delivery handed to the platform's own scheduler?
+HANDOFF_SQL = "COALESCE(json_extract(options, '$.handoff'), 0)"
 ATTACHMENTS = {"image": "attach an image", "link_card": "show a link preview"}
 
 
@@ -75,6 +89,20 @@ def validate_targets(body: str, platforms: list[str], variants: dict[str, str] |
             problems.append(f"{info.name} allows {info.char_limit} characters; {which} is {length}.")
     if problems:
         raise InvalidInput(" ".join(problems))
+
+
+def article_platforms(platforms: list[str]) -> list[str]:
+    """The chosen platforms that publish whole blog posts rather than the post text."""
+    return [p for p in platforms if p in PLATFORMS and "article" in PLATFORMS[p].features]
+
+
+def validate_source(platforms: list[str], blog_url: str | None) -> None:
+    """Article platforms (dev.to) publish the blog post itself, so the post must be made from one."""
+    names = [PLATFORMS[p].name for p in article_platforms(platforms)]
+    if names and not blog_url:
+        name = " and ".join(names)
+        raise InvalidInput(f"{name} publishes whole blog posts, so it only works with “From my blog”. "
+                           f"Pick a blog post, or untick {name}.")
 
 
 def validate_time(scheduled_at: datetime) -> None:
@@ -155,6 +183,9 @@ class PostService:
                     raise InvalidInput("The attached image isn't available any more. Attach it again.")
                 if kind == "link_card" and not (blog_url or URL_RE.search(text_for(pid, body, variants))):
                     raise InvalidInput(f"A link preview needs a link in the {info.name} text, or a blog post.")
+            if opts["handoff"] and (kind != "none" or opts["first_comment"]):
+                raise InvalidInput(f"{info.name}'s own scheduler only gets the text from this app. "
+                                   f"Add images, link previews and a first comment in {info.name} instead.")
             out[pid] = opts
         return out
 
@@ -175,6 +206,7 @@ class PostService:
         """`log=False` lets a caller that creates many posts record one summary instead."""
         platforms = list(dict.fromkeys(platforms))  # de-duplicate, keep order
         validate_targets(body, platforms, variants)
+        validate_source(platforms, blog_url)
         validate_time(scheduled_at)
         checked = self._checked_options(body, platforms, variants, options, blog_url)
         now = now_iso()
@@ -200,6 +232,7 @@ class PostService:
                            "Use “Edit on LinkedIn” for the live LinkedIn post.")
         platforms = list(dict.fromkeys(platforms))
         validate_targets(body, platforms, variants)
+        validate_source(platforms, blog_url)
         validate_time(scheduled_at)
         checked = self._checked_options(body, platforms, variants, options, blog_url)
         with self.db.connect() as conn:
@@ -245,9 +278,9 @@ class PostService:
         Each comes with the text, link and options it should be published with."""
         with self.db.connect() as conn:
             rows = conn.execute(
-                """
+                f"""
                 UPDATE post_targets SET status='publishing'
-                WHERE status='scheduled' AND post_id IN (
+                WHERE status='scheduled' AND {HANDOFF_SQL} = 0 AND post_id IN (
                     SELECT id FROM posts WHERE scheduled_at <= ?
                 )
                 RETURNING id, post_id, platform, body_override, options
@@ -263,6 +296,30 @@ class PostService:
                     "options": json.loads(r["options"] or "{}"),
                 })
         return claimed
+
+    def settle_handoffs(self) -> int:
+        """Posts handed to a platform's own scheduler go out there, not from here. Once their time has
+        passed, record them as published so the calendar and analytics count them. Returns how many."""
+        with self.db.connect() as conn:
+            rows = conn.execute(
+                f"""
+                UPDATE post_targets
+                SET status='published', published_at=(SELECT scheduled_at FROM posts WHERE posts.id = post_id)
+                WHERE status='scheduled' AND {HANDOFF_SQL} = 1 AND post_id IN (
+                    SELECT id FROM posts WHERE scheduled_at <= ?
+                )
+                RETURNING id
+                """,
+                (now_iso(),),
+            ).fetchall()
+            settled = [self._target(conn, r["id"]) for r in rows]
+        for t in settled:
+            name = platform_names([t["platform"]])
+            self.activity.record(
+                "published", f"{snippet(t['body'])} was due on {name}, posted by {name}'s own scheduler. "
+                             f"The app can't check it, so look on {name} if in doubt.",
+                platform=t["platform"], post_id=t["post_id"])
+        return len(settled)
 
     def _target(self, conn, target_id: int) -> dict[str, Any]:
         row = conn.execute(
@@ -356,6 +413,42 @@ class PostService:
                 (platform,),
             ).fetchall()
         return [dict(r) for r in rows]
+
+    def published_targets(self, platform: str) -> list[dict[str, Any]]:
+        """Every delivery that is up on a platform, including hand-offs and imported past posts
+        (which may have no post ID yet). Used to match rows of an imported analytics file."""
+        with self.db.connect() as conn:
+            rows = conn.execute(
+                "SELECT t.id, t.post_id, t.external_id, t.external_url, t.published_at, t.imported_at "
+                "FROM post_targets t WHERE t.platform=? AND t.status='published' AND t.removed_at IS NULL "
+                "ORDER BY t.published_at DESC",
+                (platform,),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def record_imported(self, platform: str, body: str, external_id: str | None, external_url: str,
+                        published_at: str) -> int:
+        """Add a past post found in a platform's export, so its statistics have a home. Returns the target id."""
+        now = now_iso()
+        with self.db.connect() as conn:
+            post_id = conn.execute(
+                "INSERT INTO posts (body, source, scheduled_at, created_at, updated_at) VALUES (?, 'custom', ?, ?, ?)",
+                (body, published_at, now, now),
+            ).lastrowid
+            return conn.execute(
+                "INSERT INTO post_targets (post_id, platform, status, external_id, external_url, published_at, "
+                "imported_at) VALUES (?, ?, 'published', ?, ?, ?, ?)",
+                (post_id, platform, external_id, external_url, published_at, now),
+            ).lastrowid
+
+    def set_link(self, target_id: int, external_id: str | None, external_url: str) -> None:
+        """Fill in the live post's ID and link when the app didn't get them (a hand-off). Never overwrites."""
+        with self.db.connect() as conn:
+            conn.execute(
+                "UPDATE post_targets SET external_id=COALESCE(external_id, ?), "
+                "external_url=COALESCE(external_url, ?) WHERE id=?",
+                (external_id, external_url, target_id),
+            )
 
     def save_metrics(self, target_id: int, source: str, values: dict[str, int | None]) -> bool:
         """Store a post's statistics. An import never overwrites numbers fetched from the API."""

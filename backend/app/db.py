@@ -82,7 +82,7 @@ CREATE TABLE IF NOT EXISTS activity (
     at            TEXT    NOT NULL,   -- UTC ISO-8601
     kind          TEXT    NOT NULL,   -- started | scheduled | edited | deleted | retried | published
                                       -- | failed | interrupted | test_post | signed_in | blog_synced
-                                      -- | blog_planned | removed
+                                      -- | blog_planned | removed | stats_imported
     platform      TEXT,               -- platform id, when the event is about one platform
     post_id       INTEGER,
     message       TEXT    NOT NULL,   -- one sentence, shown to the user as is
@@ -96,7 +96,8 @@ CREATE TABLE IF NOT EXISTS activity (
 MIGRATIONS: tuple[tuple[str, str, str], ...] = (
     # Text for this platform when it differs from the post's main text (e.g. a longer LinkedIn version).
     ("post_targets", "body_override", "TEXT"),
-    # Per-platform options as JSON: visibility, allow_reshare, attachment, image_id, image_alt, first_comment.
+    # Per-platform options as JSON: visibility, allow_reshare, attachment, image_id, image_alt, first_comment,
+    # draft (dev.to: save as a draft instead of publishing), handoff (LinkedIn's own scheduler posts it).
     ("post_targets", "options", "TEXT NOT NULL DEFAULT '{}'"),
     # The post went out, but an extra step didn't (e.g. the first comment).
     ("post_targets", "warning", "TEXT"),
@@ -104,6 +105,8 @@ MIGRATIONS: tuple[tuple[str, str, str], ...] = (
     ("post_targets", "removed_at", "TEXT"),
     # Text changed on the platform through the app.
     ("post_targets", "edited_at", "TEXT"),
+    # A past post read from the platform's own export (not sent by this app). See ADR 0008.
+    ("post_targets", "imported_at", "TEXT"),
 )
 
 

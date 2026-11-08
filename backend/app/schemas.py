@@ -17,6 +17,8 @@ class TargetOptionsIn(BaseModel):
     image_id: str | None = Field(None, max_length=64)       # from POST /api/media
     image_alt: str = Field("", max_length=300)
     first_comment: str = Field("", max_length=1250)         # LinkedIn's comment limit
+    draft: bool = False                                     # dev.to: save a draft instead of publishing
+    handoff: bool = False                                   # LinkedIn's own scheduler posts it, not the app
 
 
 class PostIn(BaseModel):

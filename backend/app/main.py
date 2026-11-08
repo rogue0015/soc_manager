@@ -24,6 +24,7 @@ from .platforms import Publisher, build_publishers
 from .routes.api import router
 from .services.activity import ActivityLog
 from .services.analytics import AnalyticsService
+from .services.article import ArticleReader
 from .services.attachments import Attachments
 from .services.blog import BlogService
 from .services.errors import Conflict, InvalidInput, NotFound
@@ -31,8 +32,10 @@ from .services.live import LiveService
 from .services.media import MediaService
 from .services.monitor import MonitorService
 from .services.posts import PostService
+from .services.reports import ReportService
 from .services.scheduler import SchedulerState, run_scheduler
 from .services.signin import SignInService
+from .services.social import SocialService
 from .services.stats_import import StatsImport
 from .timeutil import now_utc
 
@@ -47,7 +50,8 @@ def create_app(settings: Settings | None = None, publishers: dict[str, Publisher
     activity = ActivityLog(db)
     media = MediaService(db, settings.media_dir)
     posts = PostService(db, activity, image_exists=media.exists)
-    attachments = Attachments(db, media)
+    articles = ArticleReader(db)
+    attachments = Attachments(db, media, articles=articles)
     publishers = build_publishers(settings.secrets) if publishers is None else publishers
     scheduler = SchedulerState(settings.scheduler_enabled, settings.scheduler_interval_seconds)
 
@@ -75,10 +79,13 @@ def create_app(settings: Settings | None = None, publishers: dict[str, Publisher
     app.state.activity = activity
     app.state.blog = BlogService(db, posts, settings.blog_base_url)
     app.state.analytics = AnalyticsService(db)
+    app.state.social = SocialService(db, app.state.analytics)
+    app.state.reports = ReportService(app.state.analytics)
     app.state.monitor = MonitorService(db, settings, scheduler, publishers, started_at=now_utc())
     app.state.signin = SignInService(settings, publishers, activity)
     app.state.media = media
     app.state.attachments = attachments
+    app.state.articles = articles
     app.state.live = LiveService(posts, publishers, activity)
     app.state.stats_import = StatsImport(posts)
 

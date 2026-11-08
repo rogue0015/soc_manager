@@ -15,11 +15,15 @@ with Python.
 
 ## Project status
 
-_Last updated: 2026-11-07_
+_Last updated: 2026-11-08_
 
 | Area | Status | Notes |
 |---|---|---|
-| Tabs: Status · Analytics · Scheduler | ✅ Done | Links work (`#status`, `#analytics`, `#scheduler`); the last tab is remembered. |
+| Tabs: Status · Social · Analytics · Scheduler | ✅ Done | Links work (`#status`, `#social`, `#analytics`, `#scheduler`); the last tab is remembered. |
+| Social tab | ✅ Done | Sidebar of accounts; for each: coming up, stats and best posts, past posts, import / refresh stats, reports. |
+| LinkedIn's own scheduler | ✅ Done (one step in LinkedIn) | *Who posts it: LinkedIn's scheduler*: the app copies the text and opens LinkedIn, you set the time there; it goes out even with this computer off. LinkedIn's API can't schedule posts itself. |
+| Past LinkedIn stats | ✅ By import | LinkedIn's analytics export adds past posts (not sent by this app) with their numbers. |
+| Downloadable reports | ✅ Done | Excel (summary + every post) or CSV, per account on the Social tab or for any Analytics view. |
 | Status tab | ✅ Done | System monitor (backend, scheduler, queue, blog), problems that need attention, connectors, recent activity. Refreshes every 30 s. |
 | Connectors | ✅ Done | One card per platform on the Status tab: state, setup checklist (key names only), next step, live **Check**, developer-portal link. |
 | Analytics tab | ✅ Done | Published, failed and success rate; per day/week chart; per-platform table; why posts failed; post list. Filters: period, platform, source, status. |
@@ -35,8 +39,11 @@ _Last updated: 2026-11-07_
 | Docker | ✅ Done | Separate frontend (nginx) and backend (FastAPI) containers, one command to start. |
 | X (Twitter) connection | ⚠️ Blocked by X | Credentials valid (@Rogue0015). Posting is blocked until the X developer app is attached to a Project ([details](#x-api-access)). |
 | LinkedIn connection | ✅ Built, needs sign-in | Posts to your own feed. Press **Sign in with LinkedIn** on the Status tab ([LinkedIn setup](#linkedin-setup)). The sign-in lasts 60 days. |
+| dev.to articles | ✅ Built, needs API key | Blog posts go out as whole articles, word for word, with the blog as the original. Publish or save as draft; preview in the composer; views, reactions and comments via **Refresh stats** ([dev.to setup](#devto-setup)). |
 | Test post | ✅ Done | Connections card: pick a connected platform, edit the message, post. (X still waits on the blocker above.) |
-| Facebook, Instagram, Threads, Bluesky, Mastodon | 🕓 Planned | Can already be planned on the calendar; marked *failed: not connected* when due. |
+| Bluesky connection | ✅ Connected | Posts to your Bluesky account with clickable links and hashtags and a link preview card; **Delete on Bluesky**; likes, reposts and replies via **Refresh stats** ([Bluesky setup](#bluesky-setup)). |
+| Website stats link | ✅ Done | Social tab → *Your website* → **Website stats** opens rogue0015.goatcounter.com. |
+| Facebook, Instagram, Threads, Mastodon | 🕓 Planned | Can already be planned on the calendar; marked *failed: not connected* when due. |
 | Images / media | 🕓 Planned | |
 | Always-on hosting | 🚧 Partly | In Docker, posts go out whenever this machine and Docker are on. Remote hosting is planned. |
 
@@ -91,7 +98,7 @@ databases (`./data/` and the `sm-data` volume).
 ### Tests and checks
 
 ```bash
-.venv/bin/python -m pytest                              # 113 tests, never posts anything
+.venv/bin/python -m pytest                              # 177 tests, never posts anything
 .venv/bin/python test_credentials/test_x_credentials.py # check X keys without posting
 ```
 
@@ -99,8 +106,15 @@ databases (`./data/` and the `sm-data` volume).
 
 ## Using it
 
-Three tabs at the top: **Status** (is everything working?), **Analytics** (how did
-posts do?) and **Scheduler** (plan and schedule). **+ New post** works from any tab.
+Four tabs at the top: **Status** (is everything working?), **Social** (one account at a
+time), **Analytics** (how did posts do?) and **Scheduler** (plan and schedule).
+**+ New post** works from any tab.
+
+- **Social:** pick an account in the sidebar (on phones: the row of buttons at the top).
+  *Coming up* lists what's still to go out, *Stats* and *Best posts* cover the chosen period,
+  *Past posts* lists what went out (including imported ones). **Open** shows a post,
+  **View on …** opens it on the platform. *Import and refresh stats* and *Reports* are below.
+  *Your website* → **Website stats** opens your GoatCounter dashboard (rogue0015.goatcounter.com).
 
 - **Status:** the banner says *All systems normal* or lists what needs attention
   (failed posts, scheduler off or stalled, overdue posts). Tiles show the backend,
@@ -115,6 +129,12 @@ posts do?) and **Scheduler** (plan and schedule). **+ New post** works from any 
   or focus it and use `←` / `→`, to read each day; *Show as a table* lists them all.
 - **Schedule a post:** click a day → write text (or pick *From my blog*) →
   tick platforms → set the time → **Schedule**.
+- **Schedule on LinkedIn itself:** in *LinkedIn options* choose *Who posts it: LinkedIn's
+  scheduler* → **Schedule** → **Copy text and open LinkedIn** → paste if the box is empty →
+  clock icon → set the time shown → **Schedule** in LinkedIn. LinkedIn then posts it, even with
+  this computer off; the app keeps it on its calendar but never sends it. Images and a first
+  comment are added in LinkedIn. **Copy and open LinkedIn** on the post (or on the Social tab)
+  does it again.
 - **LinkedIn options** (shown when LinkedIn is ticked): a separate, longer LinkedIn text
   when other platforms are ticked too; attach an **image** or a **link preview** card
   (blog posts get the card by default); **who can see it**; **allow reposts**; and a
@@ -122,13 +142,23 @@ posts do?) and **Scheduler** (plan and schedule). **+ New post** works from any 
 - **Manage a live LinkedIn post:** open it on the calendar, or click it in Analytics' post list →
   **Edit on LinkedIn** changes
   its text, **Delete on LinkedIn** takes it down (both ask first). Its stats show there too.
-- **Per-post stats:** LinkedIn analytics → *Export* → Analytics tab → *LinkedIn post stats*
-  → **Import analytics file…**. Each post shows its impressions, reactions and comments.
+- **Past and per-post LinkedIn stats:** LinkedIn analytics → *Content* → longest period →
+  *Export* → Social tab → LinkedIn → **Import LinkedIn file…**. Posts sent from the app get their
+  numbers; posts from before (or made on LinkedIn) are added as *imported* past posts. Import again
+  any time to update the numbers.
+- **Reports:** Social tab → an account → **Download Excel** / **Download CSV** for the chosen
+  period, or Analytics tab → *Download this view* for exactly what the filters show. Times are in
+  your time zone; the Excel file has a summary sheet and one row per post.
 - **Edit or delete:** click a coloured entry on the calendar. Posts that are
   already published are read-only; deleting them only removes them from the
   planner, not from the platform.
 - **Plan from the blog:** in *From my blog*, tick posts → **Plan selected** →
   pick the first date, time and spacing. They are scheduled oldest first.
+- **Cross-post to dev.to:** pick *From my blog* and a post, tick **dev.to**, then **Schedule**.
+  dev.to gets the whole post as an article, with your blog as the original. Untick
+  *Publish on dev.to right away* to save it there as a draft; **Preview article** shows the
+  exact text first. To send several, tick them in *From my blog* → **Plan selected** → tick
+  dev.to. Sending a post again updates the dev.to copy instead of making a second one.
 - **Send a test post:** Status tab → *Send a test post* → pick the platform.
   It posts publicly, right away, and is kept in the planner (today on the calendar, and in
   Analytics), so a LinkedIn test post can be edited or deleted later like any other.
@@ -143,7 +173,7 @@ posts do?) and **Scheduler** (plan and schedule). **+ New post** works from any 
 ```
  Browser                frontend container (nginx)        backend container (FastAPI)
 ┌───────────┐  :8080   ┌─────────────────────────┐       ┌───────────────────────────────┐
-│ status    │ ───────▶ │ /        static UI      │       │ routes/api.py   HTTP layer    │ ──▶ X, LinkedIn APIs
+│ status    │ ───────▶ │ /        static UI      │       │ routes/api.py   HTTP layer    │ ──▶ X, LinkedIn, dev.to APIs
 │ analytics │          │ /api/*   ─────────────────────▶ │ services/       logic         │ ──▶ blog sitemap
 │ scheduler │          │ /docs    ─────────────────────▶ │ platforms/      adapters      │
 └───────────┘          └─────────────────────────┘       │ scheduler       every 30 s    │
@@ -166,7 +196,12 @@ Decisions and their reasons: [docs/decisions/](docs/decisions/)
 ([0001: overall architecture](docs/decisions/0001-architecture.md),
 [0002: Docker and the frontend/backend split](docs/decisions/0002-docker.md),
 [0003: LinkedIn sign-in](docs/decisions/0003-linkedin-sign-in.md),
-[0004: tabs, activity log, analytics](docs/decisions/0004-tabs-status-analytics.md)).
+[0004: tabs, activity log, analytics](docs/decisions/0004-tabs-status-analytics.md),
+[0005: sign in from the app](docs/decisions/0005-sign-in-from-the-app.md),
+[0006: LinkedIn post management](docs/decisions/0006-linkedin-post-management.md),
+[0007: dev.to articles](docs/decisions/0007-devto-articles.md),
+[0008: Social tab, LinkedIn's scheduler, reports](docs/decisions/0008-social-tab-handoff-reports.md),
+[0009: Bluesky](docs/decisions/0009-bluesky.md)).
 
 ### Data model
 
@@ -175,8 +210,10 @@ Decisions and their reasons: [docs/decisions/](docs/decisions/)
 - **blog_posts**: cache of the blog: title, summary, date, tags, image.
 - **post_targets** also has `body_override` (that platform's own text), `options` (JSON:
   `visibility`, `allow_reshare`, `attachment` none/image/link_card, `image_id`, `image_alt`,
-  `first_comment`), `warning` (went out, but e.g. the first comment didn't), `removed_at`
-  (deleted on the platform from the app) and `edited_at`.
+  `first_comment`, `draft` (dev.to: save as a draft), `handoff` (LinkedIn's own scheduler posts it)),
+  `warning` (went out, but e.g. the first comment didn't), `removed_at` (deleted on the platform from the app),
+  `edited_at`, and `imported_at` (a past post read from the platform's export, not sent by the app;
+  [ADR 0008](docs/decisions/0008-social-tab-handoff-reports.md)).
 - **media**: uploaded images (`id`, `mime`, `size`); files live in `data/media/` (Docker: `/data/media`).
 - **post_metrics**: one row per delivery with stats: `source` (`api` | `import`), `impressions`,
   `members_reached`, `reactions`, `comments`, `reshares`, `saves`, `link_clicks`, `clicks`,
@@ -212,10 +249,14 @@ social_manager/
 │   │   │   ├── activity.py    activity log ("Recent activity")
 │   │   │   ├── monitor.py     system snapshot for the Status tab
 │   │   │   ├── analytics.py   filtered counts for the Analytics tab
+│   │   │   ├── social.py      one account for the Social tab: upcoming, history, best posts
+│   │   │   ├── reports.py     downloadable reports (CSV, Excel with a summary sheet)
+│   │   │   ├── xlsx.py        small .xlsx writer (standard library only)
 │   │   │   ├── signin.py      "Sign in with …" from the app (OAuth redirect and callback)
 │   │   │   ├── live.py        edit / delete live posts, fetch their stats
 │   │   │   ├── media.py       uploaded images (files next to the database)
-│   │   │   ├── attachments.py image / link card / options for a post as it publishes
+│   │   │   ├── attachments.py image / link card / article / options for a post as it publishes
+│   │   │   ├── article.py     a blog post page → article (title, tags, text as Markdown)
 │   │   │   ├── stats_import.py LinkedIn analytics file (.xlsx / .csv) → per-post stats
 │   │   │   ├── scheduler.py   background publisher (and what it last did)
 │   │   │   └── errors.py      NotFound / Conflict / InvalidInput
@@ -224,7 +265,9 @@ social_manager/
 │   │       ├── base.py        Publisher interface and shared types
 │   │       ├── connectors.py  connector cards: setup state per platform (Status tab)
 │   │       ├── x.py           X adapter (OAuth 1.0a, POST /2/tweets)
-│   │       └── linkedin.py    LinkedIn adapter (OAuth 2.0 token, POST /rest/posts) and sign-in helpers
+│   │       ├── linkedin.py    LinkedIn adapter (OAuth 2.0 token, POST /rest/posts) and sign-in helpers
+│   │       ├── devto.py       dev.to adapter (API key, POST/PUT /api/articles, stats)
+│   │       └── bluesky.py     Bluesky adapter (app password, createRecord, link cards, delete, stats)
 │   └── tests/                 pytest suite (fake publisher, never posts)
 │
 ├── frontend/                  the UI: static files, no build step
@@ -236,9 +279,12 @@ social_manager/
 │       ├── main.js            entry point: load data, wire the tabs and top bar
 │       ├── tabs.js            Status / Analytics / Scheduler tabs (URL hash, keyboard)
 │       ├── status.js          Status tab: health tiles, attention list, recent activity
-│       ├── analytics.js       Analytics tab: filters, figures, platform table, post list
+│       ├── analytics.js       Analytics tab: filters, figures, platform table, post list, report links
+│       ├── social.js          Social tab: account sidebar, posts, stats, import, reports
+│       ├── handoff.js         "Finish in LinkedIn": copy the text, open LinkedIn's post box
 │       ├── chart.js           small column chart + its table view (no library)
 │       ├── post-options.js    LinkedIn options in the composer (own text, image, card, …)
+│       ├── devto-options.js   dev.to options in the composer (publish or draft, article preview)
 │       ├── live.js            a post's deliveries: status, stats, Edit / Delete on LinkedIn
 │       ├── state.js           shared state and loaders
 │       ├── api.js             fetch wrapper for the backend API
@@ -298,15 +344,18 @@ Interactive docs (try requests from the browser): **`/docs`** (Swagger) and
 | GET | `/api/media/{id}` | The uploaded image | 200 image |
 | GET | `/api/stats` | Per platform: are automatic stats on, and if not why | 200 |
 | POST | `/api/stats/refresh` | Fetch stats for live posts (only when automatic stats are on) | 200 `{updated, problems}` |
-| POST | `/api/stats/import` | Import LinkedIn's analytics export (raw body, .xlsx/.csv) | 200 summary |
+| POST | `/api/stats/import` | Import LinkedIn's analytics export (raw body, .xlsx/.csv); unmatched rows become imported past posts | 200 `{rows, matched, added, skipped, unmatched, message}` |
 | GET | `/api/connectors` | Setup state of every platform: key names only, never values (no platform calls) | 200 `Connector[]` |
 | GET | `/api/connect/{id}` | Browser: start “Sign in with …” (redirects to the platform) | 303 |
 | GET | `/api/connect/{id}/callback` | Browser: the platform returns here; saves the token, back to `/#status` | 303 |
 | GET | `/api/system` | Backend, scheduler, queue and blog health (no platform calls) | 200 `System` |
 | GET | `/api/activity?limit=` | Recent activity, newest first (`limit` 1–100, default 20) | 200 `Activity[]` |
 | GET | `/api/analytics?start=&end=&platform=&source=&status=` | Counts and posts matching the filters | 200 `Analytics` |
+| GET | `/api/social/{platform}?start=&end=` | One account: upcoming posts, history and totals for the period, best posts | 200 `Social` |
+| GET | `/api/reports/posts?format=&start=&end=&platform=&source=&status=&utc_offset=` | Download a report: `csv` or `xlsx` | 200 file |
 | GET | `/api/blog/posts` | Cached blog library, newest first | 200 `BlogPost[]` |
 | POST | `/api/blog/sync` | Re-import from the blog | 200 `BlogPost[]` |
+| GET | `/api/blog/article?url=` | A blog post as the article dev.to gets (preview; posts nothing) | 200 `Article` |
 | POST | `/api/blog/plan` | Schedule several blog posts at a fixed spacing | 201 `Post[]` |
 
 #### Platforms
@@ -361,7 +410,10 @@ timezone-aware datetimes. Without them, all posts are returned, oldest first.
 | `platforms` | At least one known platform id; duplicates are ignored |
 | `blog_url` | Optional; marks the post as coming from the blog (`source: "blog"`) |
 | `variants` | Optional `{platform: text}`: that platform's own text, checked against its own limit |
-| `options` | Optional `{platform: {visibility, allow_reshare, attachment, image_id, image_alt, first_comment}}`; 422 if the platform can't do it (see `features` in `/api/platforms`) |
+| `options` | Optional `{platform: {visibility, allow_reshare, attachment, image_id, image_alt, first_comment, draft}}`; 422 if the platform can't do it (see `features` in `/api/platforms`) |
+
+Platforms with the `article` feature (dev.to) publish the blog post itself, not `body`, so
+they need `blog_url`: without it the post is refused with 422.
 
 Each target in a `Post` also carries `text` (what that platform gets), `options`, `warning`,
 `removed_at`, `edited_at` and `metrics` (`null`, or the stats with their `source` and `updated_at`).
@@ -425,13 +477,13 @@ lists problems as sentences to show the user; empty means all is well.
  "queue": {"scheduled": 6, "publishing": 0, "published": 26, "failed": 1,
            "next_due_at": "2026-11-08T09:00:00+00:00"},
  "blog": {"posts": 19, "last_synced_at": "2026-11-07T10:53:56+00:00"},
- "platforms": {"known": 7, "connected": 2}, "database": {"size_bytes": 57344},
+ "platforms": {"known": 8, "connected": 2}, "database": {"size_bytes": 57344},
  "attention": ["1 post failed to publish. Open them on the Scheduler tab to retry."]}
 ```
 
 **`GET /api/activity`** returns the newest events first. `kind` is one of `started`,
 `scheduled`, `edited`, `deleted`, `retried`, `published`, `failed`, `interrupted`,
-`test_post`, `signed_in`, `blog_synced`, `blog_planned`.
+`test_post`, `signed_in`, `blog_synced`, `blog_planned`, `removed`, `stats_imported`.
 
 **`GET /api/connect/{id}`** and **`/api/connect/{id}/callback`** are opened by the
 browser, not called with `fetch`. Every outcome is a redirect: to the platform, or back to
@@ -463,8 +515,22 @@ is a platform id; `source` is `custom` or `blog`; `status` is `scheduled`,
             "external_url": "...", "error": null, "published_at": "...", "happened_at": "..."}]}]}
 ```
 
-`success_rate` is published ÷ (published + failed), or `null` when nothing has
-finished. Posts are newest first. Likes and views are not included (see *Project status*).
+`success_rate` is published ÷ (published + failed) over deliveries this app sent, or `null`
+when nothing has finished; `imported` counts past posts read from a platform's export (they count
+as published, not in the rate). Each target also has `imported` and `handoff` (posted by the
+platform's own scheduler). `stats` totals the post statistics. Posts are newest first.
+
+**`GET /api/social/{platform}`** takes `start` / `end` like Analytics and returns
+`totals` (as in Analytics), `upcoming` (everything still to go out, soonest first, whatever the
+dates: `post_id`, `text`, `scheduled_at`, `status`, `handoff`), `history` (published and failed
+deliveries in the period, newest first, with `metrics`) and `top` (up to 5 with the most
+impressions). 404 for an unknown platform.
+
+**`GET /api/reports/posts`** downloads a file (`Content-Disposition: attachment`). `format` is
+`csv` (default) or `xlsx`; the filters are the Analytics ones; `utc_offset` is the viewer's
+offset from UTC in minutes (e.g. `120`), used for the times in the file. Columns: Date, Platform,
+Status, Sent by, Text, Link, Content, Blog post, one per statistic, Stats from, Problem. The
+Excel file adds a *Summary* sheet: period, totals per platform and the best posts.
 
 #### Blog
 
@@ -501,6 +567,16 @@ never leaves a half-made plan.
 `every_days` is 1–60. 422 if a URL isn't in the library (sync first) or
 `start` is in the past. Returns the created `Post[]`.
 
+**`GET /api/blog/article?url=`** reads a post from the library the way dev.to will get it:
+the live page's text converted to Markdown, links made absolute. Posts nothing.
+422 if the URL isn't in the library or the page can't be read.
+
+```json
+{"title": "Hello World", "description": "I don't know how many times ...",
+ "canonical_url": "https://rogue0015.github.io/blogs/hello-world.html",
+ "tags": ["personal-branding", "ai"], "markdown": "Hi,\n\nI'm Brandon.\n\n..."}
+```
+
 ---
 
 ## Configuration
@@ -522,6 +598,9 @@ an image. Keep it at mode 660: the backend joins its group to write it.
 | `LINKEDIN_REDIRECT_URI` | Optional. Sign-in redirect for the fallback script, if port 8765 is taken |
 | `META_APP_ID`, `META_APP_SECRET` | Not used yet: for the planned Facebook and Instagram adapters |
 | `THREADS_APP_ID`, `THREADS_APP_SECRET` | Not used yet: for the planned Threads adapter |
+| `DEVTO_API_KEY` | Publishing blog posts to dev.to and reading their stats ([dev.to setup](#devto-setup)) |
+| `BLUESKY_HANDLE`, `BLUESKY_APP_PASSWORD` | Posting to Bluesky. Handle like `yourname.bsky.social` (a bare `yourname` works too); an app password, never the account password |
+| `BLUESKY_SERVICE` | Optional. Your Bluesky server, if it isn't `https://bsky.social` |
 | `LINKEDIN_SCOPES` | Optional. Permissions to ask for at sign-in (default `openid profile w_member_social`); add `r_member_postAnalytics` only once LinkedIn approved it |
 | `LINKEDIN_GRANTED_SCOPES` | Written by the sign-in: what LinkedIn granted. Automatic stats turn on when it includes `r_member_postAnalytics` |
 
@@ -612,6 +691,48 @@ Good to know:
 Decision records: [0003](docs/decisions/0003-linkedin-sign-in.md),
 [0005](docs/decisions/0005-sign-in-from-the-app.md).
 
+## dev.to setup
+
+1. On dev.to: **Settings → Extensions → DEV Community API Keys** → give it a name
+   (e.g. *Social Manager*) → **Generate API Key**.
+2. Put it in `env` as `DEVTO_API_KEY=…` and restart the backend
+   (`docker compose up -d --force-recreate backend`, or restart `./scripts/dev.sh`).
+3. **Status** tab → dev.to card → **Check**. It shows your dev.to username.
+
+Good to know:
+
+- dev.to gets the **whole blog post**, read from the live blog when it goes out, not the
+  post text. So it only works with *From my blog*, and there is no dev.to test post.
+- Your blog is set as the original (canonical URL); dev.to shows *Originally published at*.
+- Tags: dev.to removes hyphens and keeps the first four (`tech-community` → `techcommunity`).
+  No cover image is sent: every post's picture is the same headshot.
+- Sending a post that is already on dev.to (also one imported by dev.to's RSS feature) updates
+  that article. An update never takes a live article back to draft.
+- The app can't delete or edit dev.to articles (dev.to has no delete API). Change the blog post
+  and send it again, or edit it on dev.to.
+- Views, reactions and comments: Analytics tab → **Refresh stats**. Views show as *impressions*.
+
+Decision record: [0007](docs/decisions/0007-devto-articles.md).
+
+## Bluesky setup
+
+1. On Bluesky: **Settings → Privacy and security → App passwords → Add App Password**.
+   Use this, never your account password: it can be revoked on its own.
+2. Put your handle and the app password in `env` as `BLUESKY_HANDLE` and
+   `BLUESKY_APP_PASSWORD`, then restart the backend.
+3. **Status** tab → Bluesky card → **Check**. It shows `@yourname.bsky.social`.
+
+Good to know:
+
+- 300 characters per post (Bluesky counts *graphemes*; the app counts characters, which is never
+  more lenient). Links and `#hashtags` are made clickable by the app.
+- A post with a link, or from your blog, gets a preview card; its picture is left out if over 1 MB.
+- **Delete on Bluesky** takes a live post down. Bluesky has no editing.
+- Likes, reposts (and quotes) and replies come in with **Refresh stats**, read from Bluesky's
+  public API without signing in.
+
+Decision record: [0009](docs/decisions/0009-bluesky.md).
+
 ## Adding a platform
 
 1. Add a `PlatformInfo` (id, name, colour, character limit) to
@@ -636,6 +757,38 @@ Decision records: [0003](docs/decisions/0003-linkedin-sign-in.md),
 - Secrets live only in `env`. Never commit them, log them or return them from the API.
 
 ## Changelog
+
+### 2026-11-08: Bluesky, website stats link
+- **Bluesky** connected: posts with clickable links and hashtags, a link
+  preview card for links and blog posts, **Delete on Bluesky**, likes / reposts / replies via
+  **Refresh stats**. Keys `BLUESKY_HANDLE`, `BLUESKY_APP_PASSWORD` (prefix added to `SECRET_PREFIXES`).
+- Social tab: *Your website* card with a **Website stats** link to GoatCounter.
+- ADR [0009](docs/decisions/0009-bluesky.md). 177 backend tests.
+
+### 2026-11-08: Social tab, LinkedIn's own scheduler, past stats, reports
+- New **Social** tab: a sidebar of accounts; for each, *Coming up*, *Stats* with *Best posts*,
+  *Past posts*, *Import and refresh stats* and *Reports*. The LinkedIn import moved here.
+- **LinkedIn's scheduler**: *Who posts it* in the LinkedIn options. The app copies the text and
+  opens LinkedIn to set the time; LinkedIn posts it even with this computer off, and the app
+  records it as posted once its time has passed. (LinkedIn's API can't schedule posts.)
+- **Past LinkedIn stats**: the analytics import adds past posts it doesn't know yet, with their
+  numbers, and fills in the link of posts LinkedIn's scheduler sent. New column
+  `post_targets.imported_at`; imported posts don't count towards the success rate.
+- **Reports**: Excel (summary + every post) and CSV, per account or for any Analytics view.
+- New `GET /api/social/{platform}`, `GET /api/reports/posts`; option `handoff`.
+  ADR [0008](docs/decisions/0008-social-tab-handoff-reports.md). 164 backend tests.
+
+### 2026-11-08: Blog posts to dev.to
+- New platform **dev.to**: a blog post goes out as the whole article, word for word, with the
+  blog as the original. Works from the composer (*From my blog*) and **Plan selected**, so a
+  batch of posts can be spaced out and sent automatically.
+- Composer: *dev.to options* with **Publish on dev.to right away** (untick for a draft) and
+  **Preview article**. A post that isn't from the blog is refused with a clear message.
+- Sending a post again updates the existing dev.to article (matched by its canonical URL).
+- Analytics: the stats card is now *Post stats*; **Refresh stats** fetches dev.to views,
+  reactions and comments.
+- New `GET /api/blog/article`, `DEVTO_API_KEY` in `env`, option `draft`. No schema change.
+  ADR [0007](docs/decisions/0007-devto-articles.md). 150 backend tests.
 
 ### 2026-11-07: Test posts can be managed; Meta and Threads keys
 - Test posts are now kept in the planner, so LinkedIn test posts can be edited or deleted

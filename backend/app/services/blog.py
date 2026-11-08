@@ -164,6 +164,8 @@ class BlogService:
         """Give roomier platforms (LinkedIn) the full summary when a stricter one (X) shortened it."""
         own = {}
         for pid in platforms:
+            if "article" in PLATFORMS[pid].features:
+                continue  # it publishes the blog post itself, not this text
             text = compose_text(post, [pid])
             if text != shared:
                 own[pid] = text

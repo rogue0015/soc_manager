@@ -89,7 +89,7 @@ def test_system_reports_queue_and_flags_problems(app, client, fake_x):
     s = client.get("/api/system").json()
     assert s["queue"]["scheduled"] == 1 and s["queue"]["failed"] == 1
     assert s["queue"]["next_due_at"] == upcoming["scheduled_at"]
-    assert s["platforms"] == {"known": 7, "connected": 1}
+    assert s["platforms"] == {"known": 8, "connected": 1}
     assert s["scheduler"]["enabled"] is False
     assert s["database"]["size_bytes"] > 0
     assert any("scheduler is off" in n for n in s["attention"])
@@ -131,7 +131,7 @@ def test_analytics_counts_deliveries_per_platform(app, client):
     publish_now(app, both)  # X works; LinkedIn has no adapter in tests, so it fails
 
     r = client.get("/api/analytics").json()
-    assert r["totals"] == {"scheduled": 1, "publishing": 0, "published": 1, "failed": 1,
+    assert r["totals"] == {"scheduled": 1, "publishing": 0, "published": 1, "failed": 1, "imported": 0,
                            "success_rate": 0.5, "posts": 2, "stats": {"posts": 0}}
     assert [(p["platform"], p["published"], p["failed"]) for p in r["by_platform"]] == [("x", 1, 0), ("linkedin", 0, 1)]
     assert r["failure_reasons"] == [{"error": "LinkedIn is not connected yet.", "count": 1}]

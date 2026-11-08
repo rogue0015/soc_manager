@@ -1,7 +1,7 @@
 """Connector cards for the Status tab: how each platform connects and how far setup has got.
 
 Built platforms describe their own connector next to their adapter (x.py,
-linkedin.py); the ones without an adapter yet are described here. The report
+linkedin.py, devto.py, bluesky.py); the ones without an adapter yet are described here. The report
 only looks at which env keys are *present* and returns their names: values
 never leave the backend. It makes no network calls; the live check is
 GET /api/platforms/{id}/status.
@@ -12,7 +12,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from . import linkedin, x
+from . import bluesky, devto, linkedin, x
 from .base import Connector, PlatformInfo, Publisher
 
 META_APPS = "https://developers.facebook.com/apps"
@@ -20,6 +20,7 @@ META_APPS = "https://developers.facebook.com/apps"
 CONNECTORS: dict[str, Connector] = {
     "x": x.CONNECTOR,
     "linkedin": linkedin.CONNECTOR,
+    "devto": devto.CONNECTOR,
     "facebook": Connector(
         auth="Meta app with a Page access token",
         portal_url=META_APPS,
@@ -37,11 +38,7 @@ CONNECTORS: dict[str, Connector] = {
         portal_url=META_APPS,
         note="Not built yet. Posts through the Threads API with a Meta app.",
     ),
-    "bluesky": Connector(
-        auth="Handle + app password",
-        portal_url="https://bsky.app/settings/app-passwords",
-        note="Not built yet. Quick to add: it only needs your handle and an app password.",
-    ),
+    "bluesky": bluesky.CONNECTOR,
     "mastodon": Connector(
         auth="Access token from your server",
         note="Not built yet. Create the token on your server under Preferences → Development, "
