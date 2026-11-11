@@ -158,6 +158,18 @@ class BlueskyPublisher(Publisher):
         created = self._xrpc(session, "com.atproto.repo.createRecord",
                              json={"repo": session["did"], "collection": POST, "record": record})
         rkey = created["uri"].rsplit("/", 1)[1]
+        comment = (extras.first_comment if extras else "").strip()
+        if comment:   # the first comment is a reply to the post itself
+            ref = {"uri": created["uri"], "cid": created.get("cid")}
+            reply = {"$type": POST, "text": comment, "reply": {"root": ref, "parent": ref},
+                     "createdAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")}
+            if found := facets(comment):
+                reply["facets"] = found
+            try:
+                self._xrpc(session, "com.atproto.repo.createRecord",
+                           json={"repo": session["did"], "collection": POST, "record": reply})
+            except PublishError as exc:
+                warning = " ".join(w for w in (warning, f"The first comment wasn't posted: {exc}") if w)
         return PublishResult(external_id=created["uri"],
                              external_url=f"https://bsky.app/profile/{session.get('handle', self._handle)}/post/{rkey}",
                              warning=warning)

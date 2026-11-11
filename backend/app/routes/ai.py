@@ -53,7 +53,7 @@ def delete_persona(persona_id: int, request: Request):
 def generate(data: GenerateIn, request: Request):
     """One draft per platform, from Gemini. Sends the idea or blog text to Google; posts nothing."""
     return request.app.state.ai.generate(data.source, data.idea, data.blog_url, data.event.model_dump(),
-                                         data.platforms, data.persona_id)
+                                         data.platforms, data.persona_id, data.link_in_first_comment)
 
 
 @router.get("/generations")

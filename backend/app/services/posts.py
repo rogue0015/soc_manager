@@ -203,6 +203,28 @@ class PostService:
                 raise InvalidInput(f"{info.name} only posts videos. Attach a video, or untick {info.name}.")
         return out
 
+    def _prepare(self, body: str, scheduled_at: datetime, platforms: list[str],
+                 blog_url: str | None = None, variants: dict[str, str] | None = None,
+                 options: dict[str, dict[str, Any]] | None = None) -> dict[str, Any]:
+        platforms = list(dict.fromkeys(platforms))
+        validate_targets(body, platforms, variants)
+        validate_source(platforms, blog_url)
+        validate_time(scheduled_at)
+        return {
+            "body": body,
+            "scheduled_at": scheduled_at,
+            "platforms": platforms,
+            "blog_url": blog_url,
+            "variants": variants,
+            "options": self._checked_options(body, platforms, variants, options, blog_url),
+        }
+
+    def validate(self, body: str, scheduled_at: datetime, platforms: list[str],
+                 blog_url: str | None = None, variants: dict[str, str] | None = None,
+                 options: dict[str, dict[str, Any]] | None = None) -> None:
+        """Check the same content, platform and schedule rules used by post creation."""
+        self._prepare(body, scheduled_at, platforms, blog_url, variants, options)
+
     @staticmethod
     def _insert_targets(conn, post_id: int, body: str, platforms: list[str],
                         variants: dict[str, str] | None, options: dict[str, dict]) -> None:
@@ -218,24 +240,47 @@ class PostService:
                variants: dict[str, str] | None = None,
                options: dict[str, dict[str, Any]] | None = None) -> dict[str, Any]:
         """`log=False` lets a caller that creates many posts record one summary instead."""
-        platforms = list(dict.fromkeys(platforms))  # de-duplicate, keep order
-        validate_targets(body, platforms, variants)
-        validate_source(platforms, blog_url)
-        validate_time(scheduled_at)
-        checked = self._checked_options(body, platforms, variants, options, blog_url)
+        prepared = self._prepare(body, scheduled_at, platforms, blog_url, variants, options)
         now = now_iso()
         with self.db.connect() as conn:
             cur = conn.execute(
                 "INSERT INTO posts (body, source, blog_url, scheduled_at, created_at, updated_at) "
                 "VALUES (?, ?, ?, ?, ?, ?)",
-                (body, "blog" if blog_url else "custom", blog_url, to_utc_iso(scheduled_at), now, now),
+                (body, "blog" if prepared["blog_url"] else "custom", prepared["blog_url"],
+                 to_utc_iso(prepared["scheduled_at"]), now, now),
             )
             post_id = cur.lastrowid
-            self._insert_targets(conn, post_id, body, platforms, variants, checked)
+            self._insert_targets(conn, post_id, prepared["body"], prepared["platforms"], prepared["variants"],
+                                 prepared["options"])
         if log:
-            self.activity.record("scheduled", f"Scheduled {snippet(body)} for {platform_names(platforms)}.",
+            self.activity.record("scheduled",
+                                 f"Scheduled {snippet(prepared['body'])} for {platform_names(prepared['platforms'])}.",
                                  post_id=post_id)
         return self.get(post_id)
+
+    def create_many(self, posts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Create a validated batch in one transaction and record one activity summary."""
+        prepared = [self._prepare(**post) for post in posts]
+        if not prepared:
+            return []
+
+        now = now_iso()
+        post_ids: list[int] = []
+        with self.db.connect() as conn:
+            for post in prepared:
+                cur = conn.execute(
+                    "INSERT INTO posts (body, source, blog_url, scheduled_at, created_at, updated_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (post["body"], "blog" if post["blog_url"] else "custom", post["blog_url"],
+                     to_utc_iso(post["scheduled_at"]), now, now),
+                )
+                post_id = cur.lastrowid
+                post_ids.append(post_id)
+                self._insert_targets(conn, post_id, post["body"], post["platforms"], post["variants"],
+                                     post["options"])
+
+        self.activity.record("scheduled", f"Imported {len(post_ids)} scheduled posts from CSV.")
+        return [self.get(post_id) for post_id in post_ids]
 
     def update(self, post_id: int, body: str, scheduled_at: datetime, platforms: list[str],
                blog_url: str | None = None, variants: dict[str, str] | None = None,

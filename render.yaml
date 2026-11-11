@@ -1,0 +1,46 @@
+# Render Blueprint for Social Manager.
+#
+# One always-on web service built from the root Dockerfile (it serves both the
+# UI and the API). State lives on the persistent disk mounted at /data: the
+# SQLite database, the uploaded media and the platform-keys file.
+#
+# Platform keys are NOT here. Upload your local `env` file as a Secret File
+# named `env` in the Render dashboard; the container seeds it onto the disk on
+# first boot. See the deployment steps in the README/answer.
+services:
+  - type: web
+    name: social-manager
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: starter
+    # Closest region to Asia; change it if your account doesn't offer it.
+    region: singapore
+    healthCheckPath: /api/health
+    autoDeploy: true
+
+    # SQLite + uploaded media. The scheduler needs this to survive restarts.
+    disk:
+      name: sm-data
+      mountPath: /data
+      sizeGB: 1
+
+    envVars:
+      # Set this to the service's own URL once it exists, e.g.
+      # https://social-manager.onrender.com . Sign-in (OAuth) redirects return
+      # here, so it must match the redirect URL you register with each platform.
+      - key: SM_PUBLIC_URL
+        sync: false
+
+      # Publish scheduled posts from the background scheduler (default is on).
+      - key: SM_SCHEDULER
+        value: "on"
+
+      # Blog to import posts from.
+      - key: SM_BLOG_BASE_URL
+        value: https://rogue0015.github.io
+
+      # To change or add a platform key later, set it here as an environment
+      # variable: environment variables win over the `env` file on the disk.
+      # - key: GEMINI_API_KEY
+      #   sync: false

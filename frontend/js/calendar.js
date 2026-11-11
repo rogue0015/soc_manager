@@ -1,6 +1,7 @@
 // Monthly calendar. One coloured chip per post per platform, so colour = platform.
 
 import { openComposer } from './composer.js';
+import { openPostDetails } from './post-details.js';
 import { state, visibleDays } from './state.js';
 import { dateKey, fmt, h, sameDay } from './util.js';
 
@@ -29,7 +30,7 @@ function chip(post, target) {
     style: { background: p.color, color: p.text_color },
     title: target.error ? `${label}\nError: ${target.error}` : label,
     'aria-label': label,
-    onclick: (e) => { e.stopPropagation(); openComposer({ post }); },
+    onclick: (e) => { e.stopPropagation(); openPostDetails(post); },
   },
   STATUS_ICON[target.status] ? h('span', { class: 'status-icon', 'aria-hidden': 'true' }, STATUS_ICON[target.status]) : null,
   h('span', { class: 'chip-text' }, `${when} ${firstLine}`));

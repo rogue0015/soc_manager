@@ -15,7 +15,7 @@ with Python.
 
 ## Project status
 
-_Last updated: 2026-11-08_
+_Last updated: 2026-11-09_
 
 | Area | Status | Notes |
 |---|---|---|
@@ -34,6 +34,8 @@ _Last updated: 2026-11-08_
 | Automatic LinkedIn stats | ⚠️ Needs LinkedIn approval | Built, switched off. LinkedIn only grants it to registered companies (Community Management API). |
 | X likes and views | ⚠️ Blocked | X's current API tier can't read them. |
 | Monthly content calendar | ✅ Done | Scheduler tab. Click a day to schedule; click an entry to edit. Colour-coded by platform. |
+| Scheduled post details | ✅ Done | Calendar entries open a compact details dialog; edit or remove with labelled icon buttons. |
+| Bulk scheduled-post import | ✅ Done | Download the CSV template, validate a preview, then add all rows to the normal scheduled-post queue. |
 | Custom posts | ✅ Done | Write your own text, pick platforms, date and time. |
 | Blog import | ✅ Done | Reads the blog's sitemap and post metadata (19 posts). |
 | Blog auto-plan | ✅ Done | Select posts, choose a start date and spacing; one post per slot is created. |
@@ -388,6 +390,7 @@ Interactive docs (try requests from the browser): **`/docs`** (Swagger) and
 | GET | `/api/posts?start=&end=` | Posts in a time range | 200 `Post[]` |
 | GET | `/api/posts/{id}` | One post | 200 `Post` |
 | POST | `/api/posts` | Schedule a post | 201 `Post` |
+| POST | `/api/posts/import?preview=true&tz=Area/City` | Validate a scheduled-post .xlsx or CSV without creating posts; `preview=false` imports all rows atomically. `tz` (IANA) is used for times without an offset | 200 `{valid, posts, errors, created?}` |
 | PUT | `/api/posts/{id}` | Edit a post (only if nothing is published yet) | 200 `Post` |
 | DELETE | `/api/posts/{id}` | Remove from the planner | 204 |
 | POST | `/api/posts/{id}/retry` | Re-queue the platforms that failed | 200 `Post` |
@@ -454,6 +457,15 @@ connected, or the platform rejects it.
 ```
 
 #### Scheduled posts
+
+**Bulk import** reads an Excel workbook (.xlsx; the template is one) or a CSV file with the columns
+`body`, `scheduled_at`, `platforms` and optional `blog_url`. In a workbook the first sheet with those
+columns is used, and Excel date cells are read as dates. Separate platforms with semicolons; ids or names work (`x;linkedin` or `X;LinkedIn`).
+`scheduled_at` is an ISO date and time; without an offset (`2026-12-01 09:00`) it is read in the browser's
+timezone. Spreadsheet exports are accepted as they are: UTF-8 or Windows-1252, comma or semicolon
+separated, any header case. Error row numbers match the spreadsheet's rows. Download the Excel template (a Posts sheet plus a How to fill sheet) from the
+Scheduler tab's **Bulk import** section. Old .xls files get a "Save As .xlsx" message. The app validates all rows first; a bad row prevents the entire import.
+Imported posts use the normal planner records and scheduler, and are not published immediately.
 
 **`GET /api/posts`**: `start` (inclusive) and `end` (exclusive) are optional
 timezone-aware datetimes. Without them, all posts are returned, oldest first.
@@ -888,6 +900,26 @@ Decision record: [0012](docs/decisions/0012-ai-generation.md).
 - Secrets live only in `env`. Never commit them, log them or return them from the API.
 
 ## Changelog
+
+### 2026-11-09: Post details and scheduled-post CSV import
+- Calendar entries open a compact details dialog with labelled icon actions for editing and removing.
+- Scheduler: download a CSV template and validate imports before adding the full batch to the existing post queue.
+- CSV columns are `body`, `scheduled_at` (timezone-aware ISO 8601), `platforms` (semicolon-separated ids)
+  and optional `blog_url`; imports are atomic and never publish immediately.
+- Import fixes after testing: the template downloads in Docker (it was missing from the frontend image);
+  times without an offset use the browser's timezone; platform names, header case, semicolon-separated and
+  Windows-1252 files from Excel are accepted; blank rows aren't counted; errors are plain sentences with
+  spreadsheet row numbers; picking the same file again after fixing it re-checks it.
+- Bulk import uses Excel: the template is an .xlsx workbook, .xlsx uploads are read (Excel date cells
+  included) and CSV still works. The .xlsx reader moved to `services/xlsx.py`, shared with the stats import.
+
+### 2026-11-08: Link in the first comment, Bluesky first comments, blog content plan
+- AI generation can keep links out of the text (`link_in_first_comment`); each draft then carries the link as
+  `first_comment`. Gemini's platform names ("LinkedIn") are now understood as well as ids.
+- Bluesky supports a first comment: posted as a reply to your own post.
+- Editing a post keeps a first comment on platforms the post window has no field for (Bluesky), without
+  adding an automatic link preview.
+- Scheduled: 19 blog posts on LinkedIn and Bluesky, Mon/Wed/Fri 11:15, 9 Nov to 21 Dec, link in the first comment.
 
 ### 2026-11-08: Trash drafts, link in first comment, in-app dialogs, live Analytics
 - AI drafts: **Trash** / Restore; drafts that became posts or were trashed leave the list. A LinkedIn

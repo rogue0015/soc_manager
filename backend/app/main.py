@@ -37,6 +37,7 @@ from .services.personas import PersonaService
 from .services.media import MediaService
 from .services.monitor import MonitorService
 from .services.posts import PostService
+from .services.post_import import ScheduledPostImport
 from .services.profiles import ProfileService
 from .services.reports import ReportService
 from .services.scheduler import SchedulerState, run_scheduler
@@ -92,6 +93,7 @@ def create_app(settings: Settings | None = None, publishers: dict[str, Publisher
     app.state.settings = settings
     app.state.publishers = publishers
     app.state.posts = posts
+    app.state.post_import = ScheduledPostImport(posts)
     app.state.activity = activity
     app.state.blog = BlogService(db, posts, settings.blog_base_url)
     app.state.analytics = AnalyticsService(db)

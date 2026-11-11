@@ -16,8 +16,7 @@ stats show up too (ADR 0008). Importing the same file again updates them.
 A matched hand-off (LinkedIn's own scheduler) gets its link from the file.
 An import never overwrites numbers fetched from the API.
 
-The .xlsx reader uses only the standard library (zipfile + ElementTree) to
-avoid a dependency; files are size-capped because they are untrusted input.
+The .xlsx reader is services/xlsx.read_xlsx (standard library only).
 """
 
 from __future__ import annotations
@@ -25,19 +24,15 @@ from __future__ import annotations
 import csv
 import io
 import re
-import zipfile
-import xml.etree.ElementTree as ET
 from datetime import date, datetime, timedelta
 from typing import Any
 
 from .activity import plural
 from .errors import InvalidInput
 from .posts import PostService
+from .xlsx import read_xlsx
 
 MAX_FILE = 5 * 1024 * 1024
-MAX_SHEET = 40 * 1024 * 1024   # unzipped; guards against zip bombs
-NS = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
-REL_NS = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
 
 # Header text (lower case) -> our field. Several spellings per field.
 HEADERS = {
@@ -70,53 +65,6 @@ def post_id(link: str | None) -> str | None:
 
 # ---- reading the file ----------------------------------------------------------------
 
-def _col_index(ref: str) -> int:
-    n = 0
-    for ch in re.match(r"[A-Z]+", ref).group():
-        n = n * 26 + ord(ch) - 64
-    return n - 1
-
-
-def _xlsx_sheets(data: bytes) -> list[list[list[str]]]:
-    try:
-        z = zipfile.ZipFile(io.BytesIO(data))
-    except zipfile.BadZipFile as exc:
-        raise InvalidInput("That file isn't a readable Excel file.") from exc
-    with z:
-        if sum(i.file_size for i in z.infolist()) > MAX_SHEET:
-            raise InvalidInput("That file is too large to read.")
-        names = set(z.namelist())
-        shared = []
-        if "xl/sharedStrings.xml" in names:
-            root = ET.fromstring(z.read("xl/sharedStrings.xml"))
-            shared = ["".join(t.text or "" for t in si.iter(f"{NS}t")) for si in root.findall(f"{NS}si")]
-        rels = {}
-        if "xl/_rels/workbook.xml.rels" in names:
-            for r in ET.fromstring(z.read("xl/_rels/workbook.xml.rels")):
-                rels[r.get("Id")] = r.get("Target", "")
-        sheets = []
-        for sheet in ET.fromstring(z.read("xl/workbook.xml")).iter(f"{NS}sheet"):
-            target = rels.get(sheet.get(f"{REL_NS}id"), "")
-            path = target.lstrip("/") if target.startswith("/") else f"xl/{target}"
-            if path not in names:
-                continue
-            rows = []
-            for row in ET.fromstring(z.read(path)).iter(f"{NS}row"):
-                cells: dict[int, str] = {}
-                for c in row.findall(f"{NS}c"):
-                    kind, v = c.get("t"), c.find(f"{NS}v")
-                    if kind == "s" and v is not None:
-                        value = shared[int(v.text)]
-                    elif kind == "inlineStr":
-                        value = "".join(t.text or "" for t in c.iter(f"{NS}t"))
-                    else:
-                        value = v.text if v is not None and v.text else ""
-                    cells[_col_index(c.get("r", "A1"))] = value.strip()
-                rows.append([cells.get(i, "") for i in range(max(cells) + 1)] if cells else [])
-            sheets.append(rows)
-        return sheets
-
-
 def _csv_sheets(data: bytes) -> list[list[list[str]]]:
     text = data.decode("utf-8-sig", errors="replace")
     try:
@@ -131,7 +79,7 @@ def read_sheets(data: bytes) -> list[list[list[str]]]:
         raise InvalidInput("That file is empty.")
     if len(data) > MAX_FILE:
         raise InvalidInput("That file is larger than 5 MB; is it LinkedIn's analytics export?")
-    return _xlsx_sheets(data) if data[:2] == b"PK" else _csv_sheets(data)
+    return read_xlsx(data) if data[:2] == b"PK" else _csv_sheets(data)
 
 
 # ---- finding post rows -------------------------------------------------------------

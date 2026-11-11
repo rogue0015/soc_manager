@@ -8,6 +8,7 @@ import { openComposer } from './composer.js';
 import { initConnections } from './connections.js';
 import { initHandoff } from './handoff.js';
 import { initMedia } from './media.js';
+import { initPostImport } from './post-import.js';
 import { initSocial } from './social.js';
 import { loadPlatforms, refreshPosts, setMonth, state, subscribe } from './state.js';
 import { initStatus } from './status.js';
@@ -48,6 +49,7 @@ async function start() {
   initHandoff();
   initSocial();
   initMedia(openComposer);
+  initPostImport();
   initAI();
   initAnalytics();
   initTabs();

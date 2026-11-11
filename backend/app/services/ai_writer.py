@@ -64,7 +64,7 @@ Rules that always apply:
 - Use only the facts given in the request: the idea, the blog post and the event details. Never invent numbers, \
 names, quotes, dates, results or links.
 - Write exactly one post for each platform listed, in that platform's style, and stay well under its character limit.
-- If a blog post link is given, include it once in each post.
+- Links: do exactly what the request says about links, and never add any other link.
 - Write every post ready to publish: no placeholders, no notes to the author, no quotation marks around it.
 - Answer with JSON only, as asked."""
 
@@ -205,7 +205,8 @@ class AIWriter:
     # ---- generating ----
 
     def generate(self, source: str, idea: str, blog_url: str | None, event: dict[str, str],
-                 platforms: list[str], persona_id: int) -> dict[str, Any]:
+                 platforms: list[str], persona_id: int, link_in_comment: bool = False) -> dict[str, Any]:
+        """`link_in_comment`: keep links out of the text; each draft carries the link as `first_comment`."""
         platforms = self._platforms(platforms)
         persona = self.personas.get(persona_id)
         idea = idea.strip()
@@ -217,15 +218,16 @@ class AIWriter:
                 raise InvalidInput("Pick a blog post to write about.")
             article = self.articles.preview(blog_url)   # must be in the blog library
         event = {k: (event.get(k) or "").strip() for k in EVENT_FIELDS}
-        inputs = {"source": source, "idea": idea, "blog_url": blog_url if source == "blog" else None, "event": event}
+        inputs = {"source": source, "idea": idea, "blog_url": blog_url if source == "blog" else None, "event": event,
+                  "link_in_comment": link_in_comment}
         drafts = self._write(persona, inputs, article, platforms)
         now = now_iso()
         with self.db.connect() as conn:
             gen_id = conn.execute(
                 "INSERT INTO generations (created_at, source, idea, blog_url, event, platforms, persona_id, persona, "
-                "model, drafts) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "model, drafts, link_in_comment) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (now, source, idea, inputs["blog_url"], json.dumps(event), json.dumps(platforms), persona["id"],
-                 json.dumps(persona), self.gemini().model, json.dumps(drafts)),
+                 json.dumps(persona), self.gemini().model, json.dumps(drafts), int(link_in_comment)),
             ).lastrowid
             conn.execute(f"DELETE FROM generations WHERE id NOT IN "
                          f"(SELECT id FROM generations ORDER BY id DESC LIMIT {MAX_HISTORY})")
@@ -239,7 +241,7 @@ class AIWriter:
         if platform not in gen["drafts"]:
             raise NotFound("That platform isn't part of this generation.")
         article = self.articles.preview(gen["blog_url"]) if gen["source"] == "blog" else None
-        inputs = {k: gen[k] for k in ("source", "idea", "blog_url", "event")}
+        inputs = {k: gen[k] for k in ("source", "idea", "blog_url", "event", "link_in_comment")}
         old = gen["drafts"][platform].get("text", "")
         fresh = self._write(gen["persona"], inputs, article, [platform],
                             extra=f"Write a different version from this earlier one:\n{old}" if old else "")
@@ -267,7 +269,8 @@ class AIWriter:
             text = article["markdown"]
             if len(text) > MAX_ARTICLE:
                 text = text[:MAX_ARTICLE] + "\n[…the rest of the post is left out]"
-            parts += ["", "What the posts are about: this blog post. Share it and link to it.",
+            parts += ["", "What the posts are about: this blog post." + (
+                      "" if inputs.get("link_in_comment") else " Share it and include its link once in each post."),
                       f"Title: {article['title']}", f"Summary: {article['description']}",
                       f"Link: {article['canonical_url']}", "Full text:", text]
         if inputs["idea"]:
@@ -275,6 +278,9 @@ class AIWriter:
                       inputs["idea"]]
         if not allowed_links(inputs, article):
             parts += ["", "There is no link to share: don't add any link or web address."]
+        elif inputs.get("link_in_comment"):
+            parts += ["", "Don't put any link or web address in the text: the link is posted as the first comment. "
+                          "You may end with a short pointer to it, such as “Link in the first comment.”"]
         event = [f"- {label}: {inputs['event'][k]}" for k, label in EVENT_FIELDS.items() if inputs["event"].get(k)]
         if event:
             parts += ["", "Event recap (make it part of the post):", *event]
@@ -288,10 +294,13 @@ class AIWriter:
             answer = g.generate_json(system, prompt, DRAFT_SCHEMA, on_request=lambda: self.usage.take(g.rpm, g.rpd))
         except GeminiError as exc:
             raise InvalidInput(str(exc)) from exc
+        # Gemini sometimes answers with the platform's name ("LinkedIn", "X (Twitter)") instead of its id.
+        known = {k.lower(): pid for pid, info in PLATFORMS.items() for k in (pid, info.name)}
         out = {}
         for d in answer.get("drafts") or []:
-            if isinstance(d, dict) and d.get("platform") in PLATFORMS and isinstance(d.get("text"), str):
-                out[d["platform"]] = {"text": d["text"].strip(), "title": (d.get("title") or "").strip()}
+            pid = known.get(str(d.get("platform", "")).strip().lower()) if isinstance(d, dict) else None
+            if pid and isinstance(d.get("text"), str):
+                out[pid] = {"text": d["text"].strip(), "title": (d.get("title") or "").strip()}
         return out
 
     def _write(self, persona: dict[str, Any], inputs: dict[str, Any], article: dict[str, Any] | None,
@@ -324,6 +333,17 @@ class AIWriter:
                 drafts[p] = {"text": "", "length": 0, "limit": PLATFORMS[p].char_limit, "over": False,
                              "post_id": None, "unknown_links": [],
                              "error": f"Gemini didn't write a draft for {PLATFORMS[p].name}. Press Regenerate."}
+        if inputs.get("link_in_comment") and allowed:
+            link = article["canonical_url"] if article else sorted(allowed)[0]
+            for p, d in drafts.items():
+                if d["text"] and any(a in d["text"] for a in allowed):   # keep the link out of the text
+                    text = d["text"]
+                    for a in sorted(allowed, key=len, reverse=True):
+                        text = text.replace(a + "/", "").replace(a, "")
+                    text = "\n".join(" ".join(line.split()) for line in text.split("\n")).strip()
+                    keep = {k: d[k] for k in ("post_id", "error") if k in d}
+                    drafts[p] = {**_check(PLATFORMS[p], text, d.get("title", ""), allowed), **keep}
+                drafts[p]["first_comment"] = link
         return {p: drafts[p] for p in platforms}
 
     # ---- history ----
@@ -333,6 +353,7 @@ class AIWriter:
         gen = dict(row)
         for key in ("event", "platforms", "persona", "drafts"):
             gen[key] = json.loads(gen[key])
+        gen["link_in_comment"] = bool(gen.get("link_in_comment"))
         return gen
 
     def get(self, gen_id: int) -> dict[str, Any]:

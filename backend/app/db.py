@@ -156,6 +156,8 @@ MIGRATIONS: tuple[tuple[str, str, str], ...] = (
     ("post_metrics", "views", "INTEGER"),                 # video views (YouTube)
     # A past post read from the platform's own export (not sent by this app). See ADR 0008.
     ("post_targets", "imported_at", "TEXT"),
+    # AI generation: the link goes in the first comment, not in the text (ADR 0012).
+    ("generations", "link_in_comment", "INTEGER NOT NULL DEFAULT 0"),
 )
 
 

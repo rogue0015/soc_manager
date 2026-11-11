@@ -87,6 +87,7 @@ a.btn-primary { color: var(--accent-text); }
   border: 0; background: transparent; cursor: pointer;
   width: 36px; height: 36px; border-radius: 50%;
   font-size: 1.4rem; line-height: 1;
+  display: inline-grid; place-items: center; text-decoration: none; color: inherit;
 }
 .icon-btn:hover { background: var(--surface-2); }
 
@@ -322,6 +323,14 @@ dialog form { display: flex; flex-direction: column; max-height: calc(100vh - 50
 .day-post:hover { background: var(--surface-2); }
 .day-post:focus-visible { outline: 2px solid var(--accent); }
 .day-post .text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.post-detail-body { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.post-detail-targets, .post-import-errors { list-style: none; margin: 0; padding: 0; }
+.post-detail-targets { display: flex; flex-direction: column; gap: 8px; }
+.post-detail-target { display: flex; align-items: center; gap: 8px; }
+.post-detail-status { margin-left: auto; color: var(--muted); font-size: .85rem; }
+.post-import-errors { display: flex; flex-direction: column; gap: 6px; color: var(--danger); font-size: .88rem; }
+.import-card { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.import-card p, .import-card h2 { margin: 0; }
 .target-status:empty { display: none; }
 .target-status { display: flex; flex-direction: column; gap: 6px; font-size: .88rem; }
 .target-line { display: flex; gap: 8px; align-items: baseline; }

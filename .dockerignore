@@ -1,0 +1,22 @@
+# Keeps the Render image build context small and never ships secrets or data.
+# Only used when the build context is the repository root (the Render Dockerfile).
+.git
+.github
+.venv
+__pycache__
+*.py[cod]
+.pytest_cache
+
+# Local data and secrets: never in an image.
+data
+env
+.env
+.env.*
+*.db
+*.db-journal
+
+# Local-only docs and helper scripts.
+CLAUDE.md
+.claude
+docs/planning
+test_credentials

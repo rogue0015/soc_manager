@@ -338,6 +338,18 @@
         </section>
 
         <aside class="sidebar">
+          <section class="card import-card" aria-labelledby="post-import-title">
+            <div class="row between">
+              <h2 id="post-import-title">Bulk import</h2>
+              <a class="icon-btn" href="templates/scheduled-posts-template.xlsx" download
+                 aria-label="Download Excel template" title="Download Excel template">⇩</a>
+            </div>
+            <p class="muted small">Schedule many posts at once from an Excel sheet.</p>
+            <button class="btn btn-primary" type="button" id="post-import-open">
+              <span aria-hidden="true">⇧</span> Import from Excel
+            </button>
+          </section>
+
           <section class="card" id="blog" aria-labelledby="blog-title">
             <div class="row between">
               <h2 id="blog-title">From my blog</h2>
@@ -357,6 +369,54 @@
   </main>
 
   <!-- Personas for AI generation (js/personas.js) -->
+  <dialog id="post-details" aria-labelledby="post-details-title">
+    <form method="dialog" novalidate>
+      <header class="dialog-head">
+        <h2 id="post-details-title">Scheduled post</h2>
+        <button class="icon-btn" type="button" data-close aria-label="Close">×</button>
+      </header>
+      <div class="dialog-body">
+        <time id="post-details-time" class="muted small"></time>
+        <p id="post-details-body" class="post-detail-body"></p>
+        <ul id="post-details-targets" class="post-detail-targets" aria-label="Platforms"></ul>
+      </div>
+      <footer class="dialog-foot">
+        <button class="icon-btn" type="button" id="post-details-delete" aria-label="Remove from planner"
+                title="Remove from planner">⌫</button>
+        <span class="spacer"></span>
+        <button class="icon-btn" type="button" id="post-details-edit" aria-label="Edit post"
+                title="Edit post">✎</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <dialog id="post-import-dialog" aria-labelledby="post-import-dialog-title">
+    <form method="dialog" novalidate>
+      <header class="dialog-head">
+        <h2 id="post-import-dialog-title">Import scheduled posts</h2>
+        <button class="icon-btn" type="button" data-close aria-label="Close">×</button>
+      </header>
+      <div class="dialog-body">
+        <p class="muted small">Fill in the Excel template: one post per row. <b>scheduled_at</b>: a date and time
+          like 2026-12-01 09:00 (your timezone). <b>platforms</b>: names separated by ; like X;Bluesky.
+          <b>blog_url</b> is optional. CSV files work too. Nothing is posted now: posts go out at their time.</p>
+        <label class="field"><span>Excel file</span><input type="file" id="post-import-file" accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" required></label>
+        <p id="post-import-status" class="result" aria-live="polite"></p>
+        <ul id="post-import-errors" class="post-import-errors" role="alert"></ul>
+      </div>
+      <footer class="dialog-foot">
+        <a class="btn btn-ghost" href="templates/scheduled-posts-template.xlsx" download>
+          <span aria-hidden="true">⇩</span> Excel template
+        </a>
+        <span class="spacer"></span>
+        <button class="btn btn-ghost" type="button" data-close>Cancel</button>
+        <button class="btn btn-primary" type="button" id="post-import-submit" disabled>
+          <span aria-hidden="true">⇧</span> Import posts
+        </button>
+      </footer>
+    </form>
+  </dialog>
+
   <dialog id="persona-dialog" class="wide" aria-labelledby="persona-title">
     <form method="dialog" id="persona-form" novalidate>
       <header class="dialog-head">

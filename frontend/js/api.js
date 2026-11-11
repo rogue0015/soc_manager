@@ -34,6 +34,11 @@ export async function request(method, path, data) {
   return body;
 }
 
+// Spreadsheet times often have no offset; the server reads those in this timezone.
+function localTimeZone() {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { return ''; }
+}
+
 async function upload(path, file) {
   let resp;
   try {
@@ -77,6 +82,8 @@ export const api = {
   posts: (start, end) =>
     request('GET', `/api/posts?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`),
   createPost: (post) => request('POST', '/api/posts', post),
+  importScheduledPosts: (file, preview = true) =>
+    upload(`/api/posts/import?preview=${preview}&tz=${encodeURIComponent(localTimeZone())}`, file),
   updatePost: (id, post) => request('PUT', `/api/posts/${id}`, post),
   deletePost: (id) => request('DELETE', `/api/posts/${id}`),
   retryPost: (id) => request('POST', `/api/posts/${id}/retry`),

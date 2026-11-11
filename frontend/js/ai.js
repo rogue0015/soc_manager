@@ -147,13 +147,15 @@ function counter(p, text, limit = p.char_limit) {
   return { text: `${fmt.num(n)}/${fmt.num(limit)}`, over: n > limit };
 }
 
-/** Open a draft in the post window. If the platform posts a first comment (LinkedIn) and the draft
- * has a link, ask whether the link should go there instead of in the post. */
+/** Open a draft in the post window. A draft written with "link in the first comment" already carries
+ * the link as its first_comment (the link is out of the text). Otherwise, if the platform posts a
+ * first comment (LinkedIn) and the text still has a link, ask whether it should go there. */
 async function openDraft(gen, pid, text) {
   const p = state.byId[pid];
+  const stored = gen.drafts[pid]?.first_comment ?? '';
+  let firstComment = stored;
   const links = linksIn(text);
-  let firstComment = '';
-  if (links.length && p.features.includes('first_comment')) {
+  if (!stored && links.length && p.features.includes('first_comment')) {
     const choice = await ask({
       title: 'Put the link in the first comment?',
       message: [

@@ -377,3 +377,30 @@ def test_links_you_gave_are_fine(app, client, fake_gemini):
                                                 "persona_id": p["id"]}).json()
     assert gen["drafts"]["x"]["unknown_links"] == []
     assert "There is no link to share" not in fake_gemini.prompts[0][1]
+
+
+# ---- link in the first comment ------------------------------------------------------------------
+
+def test_link_in_first_comment_keeps_the_link_out_of_the_text(app, client, fake_gemini):
+    _seed(app)
+    app.state.articles.fetch = lambda url, **kw: Page(PAGE)
+    p = persona(client)
+    fake_gemini.answers.append([{"platform": "linkedin", "text": "A reflection. Read: https://blog.test/blogs/one.html"},
+                                {"platform": "bluesky", "text": "Short take. Link in the first comment."}])
+    gen = client.post("/api/ai/generate", json={
+        "source": "blog", "blog_url": "https://blog.test/blogs/one.html", "platforms": ["linkedin", "bluesky"],
+        "persona_id": p["id"], "link_in_first_comment": True}).json()
+    prompt = fake_gemini.prompts[0][1]
+    assert "the link is posted as the first comment" in prompt and "Share it and include its link" not in prompt
+    li = gen["drafts"]["linkedin"]
+    assert li["text"] == "A reflection. Read:" and li["first_comment"] == "https://blog.test/blogs/one.html"
+    assert gen["drafts"]["bluesky"]["first_comment"] == "https://blog.test/blogs/one.html"
+    assert gen["link_in_comment"] is True
+
+
+def test_drafts_labelled_with_platform_names_are_understood(client, fake_gemini):
+    p = persona(client)
+    fake_gemini.answers.append([{"platform": "LinkedIn", "text": "Long one"}, {"platform": "X (Twitter)", "text": "Short"}])
+    gen = client.post("/api/ai/generate", json={"source": "idea", "idea": "Hi", "platforms": ["linkedin", "x"],
+                                                "persona_id": p["id"]}).json()
+    assert (gen["drafts"]["linkedin"]["text"], gen["drafts"]["x"]["text"]) == ("Long one", "Short")

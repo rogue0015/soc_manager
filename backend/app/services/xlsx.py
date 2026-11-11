@@ -1,9 +1,12 @@
-"""Write a small .xlsx workbook with the standard library (zip + XML), for downloadable reports.
+"""Read and write small .xlsx workbooks with the standard library (zip + XML), no dependency.
 
-Only what reports need: several sheets, text and numbers, a bold header row,
+Writing covers what reports need: several sheets, text and numbers, a bold header row,
 column widths and a frozen first row. Text is stored as inline strings, so a
-spreadsheet never runs a post's text as a formula. Reading these files back is
-services/stats_import.read_sheets (tests do exactly that).
+spreadsheet never runs a post's text as a formula.
+
+Reading (stats import, scheduled-post import) returns every cell as text, as Excel
+stored it: dates come back as Excel serial numbers (see `excel_serial_to_datetime`).
+Uploaded files are untrusted, so the unzipped size is capped (zip bombs).
 """
 
 from __future__ import annotations
@@ -11,9 +14,13 @@ from __future__ import annotations
 import io
 import re
 import zipfile
+import xml.etree.ElementTree as ET
+from datetime import datetime, timedelta
 from dataclasses import dataclass, field
 from typing import Any
 from xml.sax.saxutils import escape
+
+from .errors import InvalidInput
 
 MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 _MAIN = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
@@ -23,6 +30,10 @@ _HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
 # XML 1.0 forbids most control characters; they can't appear even escaped.
 _ILLEGAL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
 MAX_CELL = 32767   # Excel's limit for one cell's text
+MAX_UNZIPPED = 40 * 1024 * 1024   # guards against zip bombs when reading uploads
+NS = f"{{{_MAIN}}}"
+REL_NS = f"{{{_REL}}}"
+_EXCEL_EPOCH = datetime(1899, 12, 30)   # day 0 of Excel's (1900) date system
 
 STYLES = f"""{_HEAD}<styleSheet xmlns="{_MAIN}">
 <fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts>
@@ -127,3 +138,71 @@ def write_xlsx(sheets: list[Sheet]) -> bytes:
         for i, sheet in enumerate(sheets):
             z.writestr(f"xl/worksheets/sheet{i + 1}.xml", _sheet_xml(sheet))
     return buf.getvalue()
+
+
+# ---- reading ---------------------------------------------------------------------
+
+def _col_index(ref: str) -> int:
+    n = 0
+    for ch in re.match(r"[A-Z]+", ref).group():
+        n = n * 26 + ord(ch) - 64
+    return n - 1
+
+
+def _rows(sheet_xml: bytes, shared: list[str]) -> list[list[str]]:
+    rows: list[list[str]] = []
+    for row in ET.fromstring(sheet_xml).iter(f"{NS}row"):
+        # Excel leaves empty rows out; pad them back so list positions are spreadsheet rows.
+        number = int(row.get("r") or len(rows) + 1)
+        while len(rows) < number - 1:
+            rows.append([])
+        cells: dict[int, str] = {}
+        for c in row.findall(f"{NS}c"):
+            kind, v = c.get("t"), c.find(f"{NS}v")
+            if kind == "s" and v is not None:
+                value = shared[int(v.text)]
+            elif kind == "inlineStr":
+                value = "".join(t.text or "" for t in c.iter(f"{NS}t"))
+            else:
+                value = v.text if v is not None and v.text else ""
+            cells[_col_index(c.get("r", "A1"))] = value.strip()
+        rows.append([cells.get(i, "") for i in range(max(cells) + 1)] if cells else [])
+    return rows
+
+
+def read_xlsx(data: bytes) -> list[list[list[str]]]:
+    """Every sheet of a workbook, in tab order, as rows of cell text."""
+    if data[:4] == b"\xd0\xcf\x11\xe0":
+        raise InvalidInput("That is an old Excel file (.xls). In Excel choose Save As → Excel Workbook (.xlsx).")
+    try:
+        z = zipfile.ZipFile(io.BytesIO(data))
+    except zipfile.BadZipFile as exc:
+        raise InvalidInput("That file isn't a readable Excel file.") from exc
+    with z:
+        if sum(i.file_size for i in z.infolist()) > MAX_UNZIPPED:
+            raise InvalidInput("That file is too large to read.")
+        names = set(z.namelist())
+        if "xl/workbook.xml" not in names:
+            raise InvalidInput("That file isn't a readable Excel file.")
+        shared = []
+        if "xl/sharedStrings.xml" in names:
+            root = ET.fromstring(z.read("xl/sharedStrings.xml"))
+            shared = ["".join(t.text or "" for t in si.iter(f"{NS}t")) for si in root.findall(f"{NS}si")]
+        rels = {}
+        if "xl/_rels/workbook.xml.rels" in names:
+            for r in ET.fromstring(z.read("xl/_rels/workbook.xml.rels")):
+                rels[r.get("Id")] = r.get("Target", "")
+        sheets = []
+        for sheet in ET.fromstring(z.read("xl/workbook.xml")).iter(f"{NS}sheet"):
+            target = rels.get(sheet.get(f"{REL_NS}id"), "")
+            path = target.lstrip("/") if target.startswith("/") else f"xl/{target}"
+            if path in names:
+                sheets.append(_rows(z.read(path), shared))
+        return sheets
+
+
+def excel_serial_to_datetime(value: float) -> datetime:
+    """Excel stores a date and time as days since 1899-12-30; the result has no timezone,
+    like the cell. Rounded to the minute, since 09:00 is stored as 0.375 (float noise)."""
+    moment = _EXCEL_EPOCH + timedelta(days=value)
+    return (moment + timedelta(seconds=30)).replace(second=0, microsecond=0)

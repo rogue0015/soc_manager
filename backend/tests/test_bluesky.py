@@ -148,3 +148,14 @@ def test_the_adapter_needs_handle_and_app_password():
     assert card["state"] == "needs_keys" and [i["key"] for i in card["checklist"]] == ["BLUESKY_HANDLE",
                                                                                          "BLUESKY_APP_PASSWORD"]
     assert connector_status(PLATFORMS["bluesky"], KEYS, True, NOW)["state"] == "connected"
+
+
+def test_first_comment_is_a_reply_to_the_post():
+    http = FakeBluesky()
+    result = BlueskyPublisher(KEYS, http=http).publish("Post text", PostExtras(first_comment="https://blog.test/a.html"))
+    post, reply = [kw["json"]["record"] for kw in http.sent("createRecord")]
+    assert post["text"] == "Post text" and "reply" not in post
+    assert reply["text"] == "https://blog.test/a.html"
+    assert reply["reply"]["root"] == reply["reply"]["parent"] == {"uri": URI, "cid": "bafy"}
+    assert reply["facets"][0]["features"][0]["uri"] == "https://blog.test/a.html"
+    assert result.warning is None

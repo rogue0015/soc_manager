@@ -59,3 +59,10 @@ written for each platform. Agreed in discussion before building:
 - Each generation costs one request, two if a draft needs fixing; Regenerate costs one more.
 - If the real limits differ from `GEMINI_RPM` / `GEMINI_RPD`, the 429 handling still explains what
   happened; setting the right numbers makes the app wait or refuse before Google does.
+
+## Update (2026-11-08): links in the first comment
+
+`link_in_first_comment` keeps every link out of the drafts (the prompt says so, and any link Gemini adds
+anyway is removed) and sets `first_comment` on each draft. Stored per generation (`link_in_comment`) so
+Regenerate keeps it. Bluesky gained a first comment (a reply to the post). Used for the blog content plan:
+LinkedIn and Bluesky, Mondays, Wednesdays and Fridays at 11:15.

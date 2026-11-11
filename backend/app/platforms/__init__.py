@@ -40,7 +40,7 @@ PLATFORMS: dict[str, PlatformInfo] = {
         PlatformInfo("threads", "Threads", "#525252", "#ffffff", 500),
         # 300 is Bluesky's limit in graphemes; counting characters is never more lenient.
         PlatformInfo("bluesky", "Bluesky", "#f59e0b", "#1f1300", 300,
-                     features=("link_card", "delete", "stats", "image", "video"),
+                     features=("link_card", "delete", "stats", "image", "video", "first_comment"),
                      image_formats=(("Landscape", 1600, 900), ("Square", 1080, 1080), ("Portrait", 1080, 1350)),
                      image_max_bytes=1_000_000,    # Bluesky refuses pictures over 1 MB
                      video_max_ms=3 * 60_000, video_max_bytes=100 * 1024 * 1024),

@@ -22,6 +22,7 @@ from ..timeutil import now_utc
 
 router = APIRouter(prefix="/api")
 MAX_UPLOAD = 8 * 1024 * 1024   # analytics files; nginx allows a little more
+MAX_POST_IMPORT_BYTES = 2 * 1024 * 1024
 MAX_VIDEO_BYTES = 1024 * 1024 * 1024   # media library uploads (services/media.py checks per kind)
 
 
@@ -145,6 +146,17 @@ def download_report(request: Request, format: Literal["csv", "xlsx"] = "csv",
 
 
 # ---- scheduled posts ------------------------------------------------------
+
+@router.post("/posts/import")
+async def import_scheduled_posts(request: Request, preview: bool = True,
+                                 tz: str | None = Query(None, max_length=64)):
+    """Validate a scheduled-post CSV, or explicitly import it with preview=false.
+
+    `tz` is the browser's IANA timezone, used for times written without an offset."""
+    content = await _read_body(request, MAX_POST_IMPORT_BYTES)
+    importer = request.app.state.post_import
+    return importer.preview(content, tz) if preview else importer.import_csv(content, tz)
+
 
 @router.get("/posts")
 def list_posts(request: Request, start: AwareDatetime | None = None, end: AwareDatetime | None = None):

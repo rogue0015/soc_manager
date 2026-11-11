@@ -242,6 +242,15 @@ function readForm({ now = false } = {}) {
       && (chosenBlogUrl() || /https?:\/\//.test(body.value)))
     .map((id) => [id, { attachment: 'link_card' }]));
   const base = { ...cards, ...extra.options, ...devto.options };
+  // A first comment on a platform this window has no field for (Bluesky, from the AI content plan)
+  // is kept when the post is edited, instead of being dropped on save.
+  for (const target of editing?.targets ?? []) {
+    const comment = target.options?.first_comment;
+    if (comment && target.platform !== 'linkedin' && platforms.includes(target.platform)) {
+      // The link lives in that comment, so no automatic link preview in the post itself.
+      base[target.platform] = { ...base[target.platform], first_comment: comment, attachment: 'none' };
+    }
+  }
   const attached = readMedia(platforms, base);
   if (attached.error) return { error: attached.error };
   return {

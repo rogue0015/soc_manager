@@ -82,6 +82,7 @@ class GenerateIn(BaseModel):
     event: EventIn = Field(default_factory=EventIn)
     platforms: list[str] = Field(min_length=1)
     persona_id: int
+    link_in_first_comment: bool = False          # links go in the first comment, not in the text
 
 
 class RegenerateIn(BaseModel):
